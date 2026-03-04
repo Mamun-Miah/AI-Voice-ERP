@@ -5,17 +5,10 @@ import { PrismaService } from './prisma/prisma.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
-import { UserModule } from './users/user/user.module';
 import * as Joi from 'joi';
 import { LoggerModule } from 'nestjs-pino/LoggerModule';
 import { MailModule } from './mail/mail.module';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { FilesModule } from './files/files.module';
-import { OrderModule } from './users/order-creation/order.module';
-import { BusinessModule } from './users/business-profile/business.module';
-import { CustomerReviewModule } from './users/customer-review/customer-review.module';
-import { SetScoreModule } from './users/set-score/set-score.module';
-import { DisputeModule } from './users/dispute/dispute.module';
 @Module({
   imports: [
     ThrottlerModule.forRoot([
@@ -58,14 +51,7 @@ import { DisputeModule } from './users/dispute/dispute.module';
       }),
     }),
     AuthModule,
-    UserModule,
     MailModule,
-    FilesModule,
-    BusinessModule,
-    OrderModule,
-    CustomerReviewModule,
-    SetScoreModule,
-    DisputeModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

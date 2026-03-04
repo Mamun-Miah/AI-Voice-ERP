@@ -7,13 +7,17 @@ import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { Request } from 'express';
 
 interface JwtPayload {
-  uuid: string;
-  username: string;
-  email?: string;
-  role?: string;
+  sub: string;
+  id: string;
+  phone: string;
+  username?: string;
+  role: string;
+  businessId: string;
+  isPhoneVerified: boolean;
   iat?: number;
   exp?: number;
 }
+
 interface RequestWithCookies extends Request {
   cookies: {
     Authentication?: unknown;
@@ -42,7 +46,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         },
       ]),
       ignoreExpiration: false,
-
       secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }
@@ -50,23 +53,25 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     // Fetch user
     const user = await this.prisma.user.findUnique({
-      where: { uuid: payload.uuid },
+      where: { id: payload.id }, // or payload.sub
       select: {
         id: true,
-        uuid: true,
-        email: true,
+        phone: true,
         name: true,
-        isEmailVerified: true,
-        isProfileVerified: true,
+        role: true, // <--- ADDED: Required by Controller
+        businessId: true, // <--- ADDED: Required by Controller
+        isPhoneVerified: true,
         isActive: true,
       },
     });
 
-    //disable users cannot login
+    // Disable users cannot login
     if (!user || !user.isActive) {
-      this.logger.warn({ uuid: payload.uuid }, 'User not found or inactive');
+      this.logger.warn({ id: payload.id }, 'User not found or inactive');
       throw new UnauthorizedException('User account is invalid or disabled');
     }
+
+    // This object becomes req.user
     return user;
   }
 }

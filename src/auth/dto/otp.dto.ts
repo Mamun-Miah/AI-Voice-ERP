@@ -1,32 +1,24 @@
-import { IsNotEmpty, IsString, IsUUID, Length } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RequestOtpDto {
-  @ApiProperty({
-    example: '550e8400-e29b-41d4-a716-446655440000',
-    description: 'Unique order or session UUID',
-  })
+  @ApiProperty({ example: '+880171234567', description: 'User phone number' })
+  @IsString()
   @IsNotEmpty()
-  @IsUUID()
-  uuid: string;
+  phone: string;
 }
 
 export class VerifyOtpDto {
   @ApiProperty({
-    example: '550e8400-e29b-41d4-a716-446655440000',
-    description: 'Unique order or session UUID',
-  })
-  @IsNotEmpty()
-  @IsUUID()
-  uuid: string;
-
-  @ApiProperty({
-    example: '123456',
-    description: '6 digit OTP code',
-    minLength: 6,
-    maxLength: 6,
+    example: 'clx...',
+    description: 'User ID (from signup response)',
   })
   @IsString()
-  @Length(6, 6)
+  @IsNotEmpty()
+  uuid: string;
+
+  @ApiProperty({ example: '123456', description: 'OTP Code' })
+  @IsString()
+  @IsNotEmpty()
   code: string;
 }

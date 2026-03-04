@@ -1,7 +1,11 @@
-export interface JwtUser {
-  id: number;
-  uuid: string;
-  email: string;
-  name: string;
-  isEmailVerified: boolean;
-}
+export type JwtUser = {
+  sub: string; // Standard JWT subject (User ID)
+  id: string; // Added for convenience
+  phone: string;
+  username?: string;
+  isPhoneVerified: boolean;
+  role: string;
+  businessId: string;
+  iat?: number; // Issued at (added automatically by JWT)
+  exp?: number; // Expiration (added automatically by JWT)
+};

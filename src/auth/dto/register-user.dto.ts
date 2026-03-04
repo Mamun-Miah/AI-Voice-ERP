@@ -36,6 +36,29 @@ export class RegisterUserDto {
   phone: string;
 
   @ApiProperty({
+    example: 'retail',
+    description: 'Business type of the user',
+  })
+  @IsString()
+  @IsNotEmpty()
+  businessId: string;
+  @ApiProperty({
+    example: 'Acme Corp',
+    description: "Name of the user's business",
+  })
+  @IsString()
+  @IsNotEmpty()
+  businessName: string;
+
+  @ApiProperty({
+    example: 'retail',
+    description: 'Business type of the user',
+  })
+  @IsString()
+  @IsNotEmpty()
+  businessType: string;
+
+  @ApiProperty({
     example: '123456',
     description: 'User password (minimum 6 characters)',
     minLength: 6,

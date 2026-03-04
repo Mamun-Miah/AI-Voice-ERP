@@ -1,245 +1,270 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  InternalServerErrorException,
-  HttpException,
+  // InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { AuthProvider } from '@prisma/client';
+// import { AuthProvider } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
-import { MailerService } from '@nestjs-modules/mailer';
+// import { MailerService } from '@nestjs-modules/mailer';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import type { JwtUser } from './types/jwt-user.type';
+
 export const roundsOfHashing = 12;
+
+export enum AuthProviderType {
+  EMAIL = 'EMAIL',
+  GOOGLE = 'GOOGLE',
+  GITHUB = 'GITHUB',
+  PHONE = 'PHONE',
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private mailService: MailerService,
+    // private mailService: MailerService,
     @InjectPinoLogger(AuthService.name)
     private readonly logger: PinoLogger,
   ) {}
-  //Find user by email
-  private async findUserByEmail(email: string) {
+
+  // Helper: Find user by phone
+  private async findUserByPhone(phone: string) {
     return this.prisma.user.findUnique({
-      where: { email },
-    });
-  }
-  //Find user by uuid
-  private async findUserByUuid(uuid: string) {
-    return this.prisma.user.findUnique({
-      where: { uuid },
+      where: { phone },
     });
   }
 
-  // SIGNUP)
+  // Helper: Find user by uuid
+  private async findUserByUuid(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
+  }
+
+  // 1. SIGNUP
+  // Creates Business, User, and sends OTP
   async signup(dto: RegisterUserDto) {
-    const existingUser = await this.findUserByEmail(dto.email);
+    const existingUser = await this.findUserByPhone(dto.phone);
 
     if (existingUser) {
-      this.logger.warn({ email: dto.email }, 'Signup failed: Email exists');
-      throw new BadRequestException('Email already exists');
+      this.logger.warn({ phone: dto.phone }, 'Signup failed: Phone exists');
+      throw new BadRequestException('Phone already exists');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, roundsOfHashing);
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Create Business
+      const business = await tx.business.create({
+        data: {
+          name: dto.businessName,
+          businessTypeId: dto.businessType, // Linking BusinessType
+          // Set defaults or nulls for other required fields if necessary
+        },
+      });
 
-    const user = await this.prisma.user.create({
+      // 2. Create User
+      const user = await tx.user.create({
+        data: {
+          name: dto.name,
+          phone: dto.phone,
+          businessId: business.id,
+          provider: AuthProviderType.PHONE,
+          role: 'owner', // Signup user is the owner
+          isPhoneVerified: false,
+        },
+      });
+
+      return user;
+    });
+
+    this.logger.info({ userId: result.id }, 'User and Business registered');
+
+    // 3. Send OTP for verification
+    await this.createAndSendOtp(result.phone, result.businessId);
+
+    return {
+      success: true,
+      message: 'Registration successful. Please verify your phone.',
+      data: { id: result.id, phone: result.phone },
+    };
+  }
+
+  // 2. REQUEST OTP (For Signin or Resend)
+  // Finds user by phone and sends OTP
+  async requestOtp(phone: string) {
+    const user = await this.findUserByPhone(phone);
+
+    // Security: Don't reveal if user exists or not explicitly, but usually needed for UX
+    if (!user) {
+      throw new BadRequestException('User not found. Please signup first.');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('User account is deactivated.');
+    }
+
+    await this.createAndSendOtp(user.phone, user.businessId);
+
+    return {
+      success: true,
+      message: 'OTP sent successfully.',
+    };
+  }
+
+  // Helper: Create OTP in DB and Send
+  private async createAndSendOtp(
+    phone: string,
+    businessId: string,
+    // email?: string | null,
+  ) {
+    const otp = randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60000); // 5 mins
+
+    // Hash OTP before saving to DB for security
+    // const hashedOtp = await bcrypt.hash(otp, roundsOfHashing);
+
+    // Invalidate previous OTPs for this phone
+    await this.prisma.otp.updateMany({
+      where: { phone, verified: false },
+      data: { verified: true }, // Mark old ones as used
+    });
+
+    // Create new OTP record
+    await this.prisma.otp.create({
       data: {
-        name: dto.name,
-        email: dto.email,
-        phone: dto.phone,
-        provider: AuthProvider.EMAIL,
-        passwordHash,
+        phone,
+        code: otp, // Storing hashed code
+        expiresAt,
+        businessId,
+        purpose: 'login',
       },
     });
-    this.logger.info({ userId: user.id }, 'User registered');
-    const { passwordHash: _, ...result } = user;
-    return {
-      success: true,
-      message: 'User registered successfully',
-      data: result,
-    };
+
+    // Send Email (Fallback/Simulation)
+    // if (email) {
+    //   try {
+    //     await this.mailService.sendMail({
+    //       to: email,
+    //       subject: 'Your Verification Code',
+    //       html: `<h3>Your OTP is: <b>${otp}</b></h3><p>Valid for 5 minutes.</p>`,
+    //     });
+    //     this.logger.info({ email }, 'OTP sent via email');
+    //   } catch (error: unknown) {
+    //     this.logger.error({ error }, 'Failed to send OTP email');
+    //   }
+    // }
+
+    // TODO: Integrate actual SMS Gateway here
+    this.logger.info({ phone, otp }, `OTP generated for ${phone}`);
   }
 
-  /**
-   * Send OTP to Email
-   */
-  async sendOtp(uuid: string) {
-    const otp = randomInt(100000, 999999).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60000); // 5 mins expiry
-    //find user by uuid
-    const user = await this.findUserByUuid(uuid);
+  // 3. VERIFY OTP (Used for both Signup verification and Signin)
+  async verifyOtp(id: string, code: string) {
+    const user = await this.findUserByUuid(id);
     if (!user) {
       throw new BadRequestException('User not found');
     }
-    //if user verified, no need to send OTP
-    if (user.isEmailVerified) {
-      this.logger.info({ uuid }, 'OTP request ignored: Email already verified');
-      return {
-        success: true,
-        message: 'Email is already verified',
-      };
+
+    const payload = await this.validateOtpAndGenerateToken(user.phone, code);
+
+    // If this was a signup verification, update user status
+    if (!user.isPhoneVerified) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { isPhoneVerified: true },
+      });
     }
-    const email = user.email;
 
-    //Store OTP in database
-    await this.prisma.otp.upsert({
-      where: { email },
-      update: { code: otp, expiresAt, createdAt: new Date() },
-      create: { email, code: otp, expiresAt },
-    });
-
-    //Send Email dsg
-    await this.mailService.sendMail({
-      to: email,
-      subject: 'Your Verification Code',
-      html: `<h3>Your OTP is: <b>${otp}</b></h3><p>Valid for 5 minutes.</p><br><p>From Amrastha Team</p>`,
-    });
-
-    this.logger.info({ email }, 'OTP sent successfully');
     return {
-      success: true,
-      message: 'OTP sent to email',
+      ...payload,
+      message: 'Phone verified successfully',
     };
   }
 
-  async verifyOtp(uuid: string, code: string) {
-    //find user by uuid
-    const user = await this.findUserByUuid(uuid);
+  // 4. SIGNIN (Verify OTP and Login)
+  async signinWithOtp(dto: LoginUserDto) {
+    const { phone, otp } = dto;
+    return this.validateOtpAndGenerateToken(phone, otp);
+  }
+
+  // Core Logic: Validate OTP and Generate JWT
+  private async validateOtpAndGenerateToken(phone: string, code: string) {
+    // 1. Find valid OTP record
+    const otpRecord = await this.prisma.otp.findFirst({
+      where: {
+        phone,
+        verified: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    // 2. Verify OTP code (compare hashed code)
+    const isOtpValid = await bcrypt.compare(code, otpRecord.code);
+
+    if (!isOtpValid) {
+      // Increment attempts on failure
+      await this.prisma.otp.update({
+        where: { id: otpRecord.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    // 3. Mark OTP as used
+    await this.prisma.otp.update({
+      where: { id: otpRecord.id },
+      data: { verified: true },
+    });
+
+    // 4. Find User
+    const user = await this.findUserByPhone(phone);
     if (!user) {
-      this.logger.warn({ uuid }, 'OTP verification failed: User not found');
       throw new BadRequestException('User not found');
     }
-    if (user.isEmailVerified) {
-      this.logger.info({ uuid }, 'OTP request ignored: Email already verified');
-      return {
-        success: true,
-        message: 'Email is already verified',
-      };
-    }
-    //find otp record
-    const email = user.email;
-    const otpRecord = await this.prisma.otp.findUnique({ where: { email } });
 
-    if (
-      !otpRecord ||
-      otpRecord.code !== code ||
-      otpRecord.expiresAt < new Date()
-    ) {
-      this.logger.warn({ email }, 'Invalid or expired OTP attempt');
-      throw new BadRequestException('Invalid or expired code');
-    }
-    await this.prisma.user.update({
-      where: { email },
-      data: { isEmailVerified: true },
-    });
-    // Delete OTP after successful use (Single use)
-    await this.prisma.otp.delete({ where: { email } });
-
-    this.logger.info({ email }, 'OTP verified successfully');
+    // 5. Generate JWT
     const payload = {
-      email: user.email,
-      uuid: user.uuid,
+      sub: user.id,
       phone: user.phone,
       username: user.name,
-      isEmailVerified: user.isEmailVerified,
+      isPhoneVerified: true,
+      role: user.role,
+      businessId: user.businessId,
     };
-    const accessToken = this.jwtService.sign(payload);
-    return {
-      accessToken,
-      success: true,
-      message: 'Email verified successfully',
-    };
-  }
-  // SIGNIN
-  async signin(dto: LoginUserDto) {
-    const user = await this.findUserByEmail(dto.email);
 
-    if (!user || !user.passwordHash) {
-      // Security log: User not found
-      this.logger.warn({ email: dto.email }, 'Login failed: User not found');
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-    const isPasswordValid = await bcrypt.compare(
-      dto.password,
-      user.passwordHash,
-    );
-
-    if (!isPasswordValid) {
-      this.logger.warn(
-        { userId: user.id, email: user.email },
-        'Login failed: Invalid password',
-      );
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    let accessToken: string | null = null;
-    if (user.isEmailVerified) {
-      const payload = {
-        email: user.email,
-        uuid: user.uuid,
-        phone: user.phone,
-        username: user.name,
-        isEmailVerified: user.isEmailVerified,
-      };
-      accessToken = this.jwtService.sign(payload);
-      this.logger.info({ userId: user.id }, 'User logged in successfully');
-    } else {
-      this.logger.warn(
-        { userId: user.id },
-        'Login successful but email not verified',
-      );
-    }
-    const businessInfo = await this.prisma.businessInfo.findMany({
-      where: { userId: user.id },
+    // 6. Fetch Business Info
+    const businessInfo = await this.prisma.business.findUnique({
+      where: { id: user.businessId },
       select: {
         id: true,
-        businessName: true,
-        businessLogoUrl: true,
-        businessEmail: true,
-        businessPhone: true,
+        name: true,
+        logo: true,
+        currency: true,
       },
     });
 
     return {
       accessToken,
       success: true,
-      message: user.isEmailVerified ? 'Login successful' : 'Email not verified',
       user: {
         id: user.id,
-        uuid: user.uuid,
         name: user.name,
-        email: user.email,
-        isEmailVerified: user.isEmailVerified,
+        phone: user.phone,
+        role: user.role,
       },
-      businessInfo: businessInfo,
-    };
-  }
-  async status(user: JwtUser) {
-    const userId = user.id;
-    const userData = await this.prisma.businessInfo.findMany({
-      where: { userId: userId },
-      select: {
-        id: true,
-        businessName: true,
-        businessLogoUrl: true,
-      },
-    });
-
-    return {
-      success: true,
-      loggedIn: true,
-      user: user,
-      businessInfo: userData,
+      business: businessInfo,
     };
   }
 }

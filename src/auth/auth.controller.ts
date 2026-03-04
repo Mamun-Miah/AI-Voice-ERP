@@ -17,51 +17,33 @@ const AUTH_COOKIE_OPTIONS: CookieOptions = {
   partitioned: true,
   path: '/',
 };
-// import { VerifiedGuard } from './guards/verified.guard';
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('register') //register api
-  @ApiOperation({ summary: 'Register a new user' })
+  @Post('register')
+  @ApiOperation({ summary: 'Register a new user and business' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   signup(@Body() dto: RegisterUserDto) {
     return this.authService.signup(dto);
   }
 
-  @Post('login') //login api
-  @ApiOperation({ summary: 'Login a user' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async signin(
-    @Body() dto: LoginUserDto,
-    @Res({ passthrough: true }) response: express.Response,
-  ) {
-    const { accessToken, user, message, businessInfo } =
-      await this.authService.signin(dto);
-
-    response.cookie('Authentication', accessToken, {
-      ...AUTH_COOKIE_OPTIONS,
-      maxAge: 3600000, // 1 hour
-    });
-
-    return { success: true, message, user, businessInfo };
-  }
-
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 100, ttl: 60000 } })
-  @Post('request-otp') //otp request api
-  @ApiOperation({ summary: 'Request OTP for email verification' })
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Limit to 5 requests per minute
+  @Post('request-otp')
+  @ApiOperation({ summary: 'Request OTP for login' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 400, description: 'User not found' })
   async requestOtp(@Body() dto: RequestOtpDto) {
-    return this.authService.sendOtp(dto.uuid);
+    // Changed from dto.uuid to dto.phone
+    return this.authService.requestOtp(dto.phone);
   }
 
-  @Post('verify-otp') //verify otp
-  @ApiOperation({ summary: 'Verify OTP for email verification' })
+  @Post('verify-otp')
+  @ApiOperation({ summary: 'Verify OTP (for signup verification)' })
   @ApiResponse({ status: 200, description: 'OTP verified successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   async verifyOtp(
@@ -73,15 +55,36 @@ export class AuthController {
     if (result.accessToken) {
       response.cookie('Authentication', result.accessToken, {
         ...AUTH_COOKIE_OPTIONS,
-        maxAge: 3600000,
+        maxAge: 7 * 24 * 3600000, // 7 days (matching service expiry)
       });
     }
 
     return result;
   }
+
+  @Post('login')
+  @ApiOperation({ summary: 'Login a user using Phone and OTP' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async signin(
+    @Body() dto: LoginUserDto,
+    @Res({ passthrough: true }) response: express.Response,
+  ) {
+    // Service method renamed to signinWithOtp
+    // Service returns 'business', not 'businessInfo'
+    const { accessToken, user, business } =
+      await this.authService.signinWithOtp(dto);
+
+    response.cookie('Authentication', accessToken, {
+      ...AUTH_COOKIE_OPTIONS,
+      maxAge: 7 * 24 * 3600000, // 7 days
+    });
+
+    return { success: true, user, business };
+  }
+
   @UseGuards(JwtAuthGuard)
-  // @UseGuards(VerifiedGuard)
-  @Get('status') // status api
+  @Get('status')
   @ApiOperation({ summary: 'Get user status' })
   @ApiResponse({
     status: 200,
@@ -89,8 +92,18 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   getStatus(@GetUser() user: JwtUser) {
-    return this.authService.status(user);
+    // Simply return the user attached to the request by the Guard
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        businessId: user.businessId,
+      },
+    };
   }
+
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   @ApiOperation({ summary: 'Logout a user' })

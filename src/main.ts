@@ -14,8 +14,8 @@ async function bootstrap() {
 
   //swagger api documentation
   const config = new DocumentBuilder()
-    .setTitle('AmrAstha API Documentation')
-    .setDescription('The AmrAstha API documentation')
+    .setTitle('Hello Khata API Documentation')
+    .setDescription('The Hello Khata API documentation')
     .setVersion('1.0')
     .addCookieAuth('Authentication')
     // .addTag('api')

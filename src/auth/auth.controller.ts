@@ -8,7 +8,12 @@ import express, { CookieOptions } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
 import type { JwtUser } from './types/jwt-user.type';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
 const AUTH_COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
@@ -95,6 +100,7 @@ export class AuthController {
 
   // GET /auth/status
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @Get('status')
   @ApiOperation({ summary: 'Get current user status' })
   @ApiResponse({ status: 200, description: 'User status retrieved' })
@@ -113,6 +119,7 @@ export class AuthController {
 
   // POST /auth/logout
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
   @Post('logout')
   @ApiOperation({ summary: 'Logout current user' })
   @ApiResponse({ status: 200, description: 'Logout successful' })

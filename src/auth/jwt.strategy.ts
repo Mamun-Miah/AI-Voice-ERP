@@ -7,8 +7,7 @@ import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { Request } from 'express';
 
 interface JwtPayload {
-  sub: string;
-  id: string;
+  sub: string; // userId
   phone: string;
   username?: string;
   role: string;
@@ -34,16 +33,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
+        // 1. Try cookie first
         (req: Request): string | null => {
           const request = req as RequestWithCookies;
           const token = request.cookies?.Authentication;
-
-          if (typeof token !== 'string') {
-            return null;
-          }
-
-          return token;
+          return typeof token === 'string' ? token : null;
         },
+        // 2. Fallback to Bearer header
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
@@ -51,27 +48,42 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    // Fetch user
+    // Guard: sub must exist
+    if (!payload?.sub) {
+      throw new UnauthorizedException('Invalid token payload.');
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.id }, // or payload.sub
+      where: { id: payload.sub }, //sub is the userId
       select: {
         id: true,
         phone: true,
         name: true,
-        role: true, // <--- ADDED: Required by Controller
-        businessId: true, // <--- ADDED: Required by Controller
+        role: true,
+        businessId: true,
         isPhoneVerified: true,
         isActive: true,
       },
     });
 
-    // Disable users cannot login
-    if (!user || !user.isActive) {
-      this.logger.warn({ id: payload.id }, 'User not found or inactive');
-      throw new UnauthorizedException('User account is invalid or disabled');
+    if (!user) {
+      this.logger.warn({ sub: payload.sub }, 'User not found');
+      throw new UnauthorizedException('User not found.');
     }
 
-    // This object becomes req.user
-    return user;
+    if (!user.isActive) {
+      this.logger.warn({ sub: payload.sub }, 'User account is deactivated');
+      throw new UnauthorizedException('User account is deactivated.');
+    }
+
+    // This object becomes req.user in all protected routes
+    return {
+      id: user.id,
+      phone: user.phone,
+      name: user.name,
+      role: user.role,
+      businessId: user.businessId,
+      isPhoneVerified: user.isPhoneVerified,
+    };
   }
 }

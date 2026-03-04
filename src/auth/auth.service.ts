@@ -2,202 +2,166 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  // InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-// import { AuthProvider } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
-// import { MailerService } from '@nestjs-modules/mailer';
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { RegisterUserDto } from './dto/register-user.dto';
-import { LoginUserDto } from './dto/login-user.dto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 export const roundsOfHashing = 12;
-
-export enum AuthProviderType {
-  EMAIL = 'EMAIL',
-  GOOGLE = 'GOOGLE',
-  GITHUB = 'GITHUB',
-  PHONE = 'PHONE',
-}
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    // private mailService: MailerService,
     @InjectPinoLogger(AuthService.name)
     private readonly logger: PinoLogger,
   ) {}
 
-  // Helper: Find user by phone
+  // ─── Private Helpers ──────────────────────────────────────────────────────
+
   private async findUserByPhone(phone: string) {
-    return this.prisma.user.findUnique({
-      where: { phone },
+    return this.prisma.user.findUnique({ where: { phone } });
+  }
+
+  private async findUserById(id: string) {
+    return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  private buildTokenPayload(user: {
+    id: string;
+    phone: string;
+    name: string | null;
+    role: string;
+    businessId: string;
+  }) {
+    return {
+      sub: user.id,
+      phone: user.phone,
+      username: user.name,
+      role: user.role,
+      businessId: user.businessId,
+    };
+  }
+
+  private async fetchBusinessInfo(businessId: string) {
+    return this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true, logo: true, currency: true },
     });
   }
 
-  // Helper: Find user by uuid
-  private async findUserByUuid(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
-    });
-  }
-
-  // 1. SIGNUP
-  // Creates Business, User, and sends OTP
+  // ─── 1. SIGNUP ────────────────────────────────────────────────────────────
+  // POST /auth/signup
+  // Body: { name, phone, businessName, businessType }
+  // Example: { "name": "John Doe", "phone": "1234567890", "businessName": "Acme Corp", "businessType": "retail" }
+  // Response: { userId, otp } → use to call POST /auth/verify-otp
   async signup(dto: RegisterUserDto) {
+    // 1. Guard: phone must be unique
     const existingUser = await this.findUserByPhone(dto.phone);
-
     if (existingUser) {
-      this.logger.warn({ phone: dto.phone }, 'Signup failed: Phone exists');
-      throw new BadRequestException('Phone already exists');
+      this.logger.warn(
+        { phone: dto.phone },
+        'Signup failed: phone already exists',
+      );
+      throw new BadRequestException(
+        'Phone already registered. Please sign in.',
+      );
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Create Business
+    // 2. Resolve BusinessType
+    const businessType = await this.prisma.businessType.findUnique({
+      where: { value: dto.businessType },
+    });
+    if (!businessType) {
+      throw new BadRequestException(
+        `Unknown business type: "${dto.businessType}"`,
+      );
+    }
+
+    // 3. Create Business + User atomically
+    const { business, user } = await this.prisma.$transaction(async (tx) => {
       const business = await tx.business.create({
         data: {
           name: dto.businessName,
-          businessTypeId: dto.businessType, // Linking BusinessType
-          // Set defaults or nulls for other required fields if necessary
+          type: dto.businessType,
+          businessTypeId: businessType.id,
         },
       });
 
-      // 2. Create User
       const user = await tx.user.create({
         data: {
           name: dto.name,
           phone: dto.phone,
           businessId: business.id,
-          provider: AuthProviderType.PHONE,
-          role: 'owner', // Signup user is the owner
+          provider: 'PHONE',
           isPhoneVerified: false,
+          role: 'owner',
         },
       });
 
-      return user;
+      return { business, user };
     });
 
-    this.logger.info({ userId: result.id }, 'User and Business registered');
+    // 4. Generate + hash OTP
+    const rawOtp = randomInt(100000, 999999).toString();
+    const hashedOtp = await bcrypt.hash(rawOtp, roundsOfHashing);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    // 3. Send OTP for verification
-    await this.createAndSendOtp(result.phone, result.businessId);
-
-    return {
-      success: true,
-      message: 'Registration successful. Please verify your phone.',
-      data: { id: result.id, phone: result.phone },
-    };
-  }
-
-  // 2. REQUEST OTP (For Signin or Resend)
-  // Finds user by phone and sends OTP
-  async requestOtp(phone: string) {
-    const user = await this.findUserByPhone(phone);
-
-    // Security: Don't reveal if user exists or not explicitly, but usually needed for UX
-    if (!user) {
-      throw new BadRequestException('User not found. Please signup first.');
-    }
-
-    if (!user.isActive) {
-      throw new UnauthorizedException('User account is deactivated.');
-    }
-
-    await this.createAndSendOtp(user.phone, user.businessId);
-
-    return {
-      success: true,
-      message: 'OTP sent successfully.',
-    };
-  }
-
-  // Helper: Create OTP in DB and Send
-  private async createAndSendOtp(
-    phone: string,
-    businessId: string,
-    // email?: string | null,
-  ) {
-    const otp = randomInt(100000, 999999).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60000); // 5 mins
-
-    // Hash OTP before saving to DB for security
-    // const hashedOtp = await bcrypt.hash(otp, roundsOfHashing);
-
-    // Invalidate previous OTPs for this phone
+    // 5. Invalidate stale OTPs, save new one
     await this.prisma.otp.updateMany({
-      where: { phone, verified: false },
-      data: { verified: true }, // Mark old ones as used
+      where: { phone: dto.phone, verified: false },
+      data: { verified: true },
     });
 
-    // Create new OTP record
     await this.prisma.otp.create({
       data: {
-        phone,
-        code: otp, // Storing hashed code
+        phone: dto.phone,
+        businessId: business.id,
+        code: hashedOtp,
+        purpose: 'signup',
         expiresAt,
-        businessId,
-        purpose: 'login',
       },
     });
 
-    // Send Email (Fallback/Simulation)
-    // if (email) {
-    //   try {
-    //     await this.mailService.sendMail({
-    //       to: email,
-    //       subject: 'Your Verification Code',
-    //       html: `<h3>Your OTP is: <b>${otp}</b></h3><p>Valid for 5 minutes.</p>`,
-    //     });
-    //     this.logger.info({ email }, 'OTP sent via email');
-    //   } catch (error: unknown) {
-    //     this.logger.error({ error }, 'Failed to send OTP email');
-    //   }
-    // }
+    this.logger.info(
+      { userId: user.id, businessId: business.id },
+      'Signup successful — OTP generated',
+    );
 
-    // TODO: Integrate actual SMS Gateway here
-    this.logger.info({ phone, otp }, `OTP generated for ${phone}`);
-  }
-
-  // 3. VERIFY OTP (Used for both Signup verification and Signin)
-  async verifyOtp(id: string, code: string) {
-    const user = await this.findUserByUuid(id);
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
-
-    const payload = await this.validateOtpAndGenerateToken(user.phone, code);
-
-    // If this was a signup verification, update user status
-    if (!user.isPhoneVerified) {
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { isPhoneVerified: true },
-      });
-    }
-
+    // ⚠️ In production: send rawOtp via SMS, remove from response
     return {
-      ...payload,
-      message: 'Phone verified successfully',
+      success: true,
+      message:
+        'Registration successful. Please verify your phone with the OTP.',
+      data: {
+        userId: user.id,
+        otp: rawOtp,
+      },
     };
   }
 
-  // 4. SIGNIN (Verify OTP and Login)
-  async signinWithOtp(dto: LoginUserDto) {
-    const { phone, otp } = dto;
-    return this.validateOtpAndGenerateToken(phone, otp);
-  }
+  // ─── 2. VERIFY OTP (after signup only) ────────────────────────────────────
+  // POST /auth/verify-otp
+  // Body: { userId, otp }
+  // Response: { accessToken, user, business }
+  async verifyOtp(userId: string, code: string) {
+    const user = await this.findUserById(userId);
+    if (!user) {
+      throw new BadRequestException('User not found.');
+    }
+    if (user.isPhoneVerified) {
+      throw new BadRequestException('Phone already verified. Please sign in.');
+    }
 
-  // Core Logic: Validate OTP and Generate JWT
-  private async validateOtpAndGenerateToken(phone: string, code: string) {
-    // 1. Find valid OTP record
+    // Find latest valid OTP
     const otpRecord = await this.prisma.otp.findFirst({
       where: {
-        phone,
+        phone: user.phone,
         verified: false,
         expiresAt: { gt: new Date() },
       },
@@ -205,66 +169,162 @@ export class AuthService {
     });
 
     if (!otpRecord) {
-      throw new UnauthorizedException('Invalid or expired OTP');
+      throw new UnauthorizedException('OTP not found or has expired.');
     }
 
-    // 2. Verify OTP code (compare hashed code)
-    const isOtpValid = await bcrypt.compare(code, otpRecord.code);
-
-    if (!isOtpValid) {
-      // Increment attempts on failure
+    // Verify code against hash
+    const isValid = await bcrypt.compare(code, otpRecord.code);
+    if (!isValid) {
       await this.prisma.otp.update({
         where: { id: otpRecord.id },
         data: { attempts: { increment: 1 } },
       });
-      throw new UnauthorizedException('Invalid OTP');
+      throw new UnauthorizedException('Incorrect OTP.');
     }
 
-    // 3. Mark OTP as used
-    await this.prisma.otp.update({
-      where: { id: otpRecord.id },
-      data: { verified: true },
+    // Mark OTP as used + mark phone as verified atomically
+    await this.prisma.$transaction([
+      this.prisma.otp.update({
+        where: { id: otpRecord.id },
+        data: { verified: true },
+      }),
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { isPhoneVerified: true },
+      }),
+    ]);
+
+    // Issue token
+    const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
+      expiresIn: '7d',
     });
 
-    // 4. Find User
-    const user = await this.findUserByPhone(phone);
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
+    const business = await this.fetchBusinessInfo(user.businessId);
 
-    // 5. Generate JWT
-    const payload = {
-      sub: user.id,
-      phone: user.phone,
-      username: user.name,
-      isPhoneVerified: true,
-      role: user.role,
-      businessId: user.businessId,
-    };
-
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-    // 6. Fetch Business Info
-    const businessInfo = await this.prisma.business.findUnique({
-      where: { id: user.businessId },
-      select: {
-        id: true,
-        name: true,
-        logo: true,
-        currency: true,
-      },
-    });
+    this.logger.info({ userId: user.id }, 'Phone verified — token issued');
 
     return {
-      accessToken,
       success: true,
+      message: 'Phone verified successfully.',
+      accessToken,
       user: {
         id: user.id,
         name: user.name,
         phone: user.phone,
         role: user.role,
       },
-      business: businessInfo,
+      business,
+    };
+  }
+
+  // ─── 3. SIGNIN ────────────────────────────────────────────────────────────
+  // POST /auth/signin
+  // Body: { "phone": "1234567890" }
+  // No OTP needed — phone ownership already proven at signup
+  // Response: { accessToken, user, business }
+  async signin(phone: string) {
+    const user = await this.findUserByPhone(phone);
+    if (!user) {
+      throw new NotFoundException('User not found. Please sign up first.');
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated.');
+    }
+    if (!user.isPhoneVerified) {
+      throw new UnauthorizedException(
+        'Phone not verified. Please complete signup verification first.',
+      );
+    }
+
+    const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
+      expiresIn: '7d',
+    });
+
+    const business = await this.fetchBusinessInfo(user.businessId);
+
+    this.logger.info({ userId: user.id }, 'User signed in');
+
+    return {
+      success: true,
+      accessToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+      },
+      business,
+    };
+  }
+
+  // ─── RESEND OTP ────────────────────────────────────────────────────────────
+  // POST /auth/resend-otp
+  // Body: { uuid: userId }
+  // Throttled: max 3 resends per 10 minutes
+  async resendOtp(userId: string) {
+    const user = await this.findUserById(userId);
+    if (!user) {
+      throw new BadRequestException('User not found.');
+    }
+    if (user.isPhoneVerified) {
+      throw new BadRequestException('Phone already verified. Please sign in.');
+    }
+
+    // Check if a valid OTP already exists and was created less than 1 minute ago
+    const recentOtp = await this.prisma.otp.findFirst({
+      where: {
+        phone: user.phone,
+        verified: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (recentOtp) {
+      const createdAt = recentOtp.createdAt.getTime();
+      const now = Date.now();
+      const secondsSinceCreated = (now - createdAt) / 1000;
+
+      // Must wait 60 seconds before requesting a new OTP
+      if (secondsSinceCreated < 60) {
+        const waitSeconds = Math.ceil(60 - secondsSinceCreated);
+        throw new BadRequestException(
+          `Please wait ${waitSeconds} seconds before requesting a new OTP.`,
+        );
+      }
+    }
+
+    // Invalidate old OTPs
+    await this.prisma.otp.updateMany({
+      where: { phone: user.phone, verified: false },
+      data: { verified: true },
+    });
+
+    // Generate + hash new OTP
+    const rawOtp = randomInt(100000, 999999).toString();
+    const hashedOtp = await bcrypt.hash(rawOtp, roundsOfHashing);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await this.prisma.otp.create({
+      data: {
+        phone: user.phone,
+        businessId: user.businessId,
+        code: hashedOtp,
+        purpose: 'signup',
+        expiresAt,
+      },
+    });
+
+    this.logger.info({ userId: user.id }, 'OTP resent');
+
+    // In production: send rawOtp via SMS, remove from response
+    return {
+      success: true,
+      message: 'OTP resent successfully.',
+      data: {
+        userId: user.id,
+        otp: rawOtp,
+      },
     };
   }
 }

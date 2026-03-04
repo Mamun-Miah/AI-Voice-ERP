@@ -65,7 +65,7 @@ model Business {
   stockLedger       StockLedger[]
   users             User[]
   businessType      BusinessType?     @relation(fields: [businessTypeId], references: [id])
-  businessTypeId    String?
+  businessTypeId    String
 }
 
 enum AuthProvider {

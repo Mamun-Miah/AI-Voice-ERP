@@ -1,0 +1,272 @@
+//Rules to follow//
+//Model names should be singular and start with an uppercase letter.
+//Field names should be in camelCase.
+//Use appropriate data types for each field.
+//Define relationships between models using @relation attribute.
+// & write in the first model the relation field as an array if one-to-many.
+
+generator client {
+  provider     = "prisma-client-js"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//Models
+model User {
+  id      Int     @id @default(autoincrement())
+  uuid    String  @unique @default(uuid()) @db.Uuid
+  name    String
+  email   String  @unique
+  phone   String?
+  address String?
+
+  passwordHash String?
+  provider     AuthProvider
+  providerId   String?
+
+  profileImageUrl String?
+  nidImageUrl     String?
+
+  isProfileVerified Boolean @default(false)
+  isEmailVerified   Boolean @default(false)
+  isPhoneVerified   Boolean @default(false)
+  isActive          Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  businessInfo  BusinessInfo[]
+  linkCreations OrderCreation[]
+  sellerScores  SellerScore[]
+  // sellerScores  SellerScore[]
+}
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  FACEBOOK
+  GITHUB
+}
+
+model BusinessCategory {
+  id                   Int            @id @default(autoincrement())
+  businessCategoryName String
+  businessInfo         BusinessInfo[]
+}
+
+enum BusinessTypeEnum {
+  WHOLESALE
+  RETAIL
+}
+
+model BusinessInfo {
+  id                     Int                    @id @default(autoincrement())
+  businessName           String
+  businessLogoUrl        String?
+  businessType           BusinessTypeEnum
+  businessAddress        String
+  businessPhone          String?
+  businessEmail          String                 @unique
+  businessWebsite        String?
+  businessTradeLicense   String?
+  businessWareHouse      String?
+  businessStoreFrontLink String
+  //Date
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  //businessCategoryID
+  businessCategoryId     Int
+  businessCategory       BusinessCategory       @relation(fields: [businessCategoryId], references: [id])
+  //userID
+  userId                 Int
+  user                   User                   @relation(fields: [userId], references: [id])
+  businessVerification   BusinessVerification[]
+  orderCreations         OrderCreation[]
+}
+
+model PublicLink {
+  id        Int           @id @default(autoincrement())
+  uuid      String        @unique @default(uuid()) @db.Uuid
+  link      String
+  createdAt DateTime      @default(now())
+  expiry    DateTime
+  //Relations
+  orderId   Int
+  order     OrderCreation @relation(fields: [orderId], references: [id])
+}
+
+model OrderCreation {
+  id                 Int      @id @default(autoincrement())
+  uuid               String   @unique @default(uuid()) @db.Uuid
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  orderDate          DateTime
+  deliveryDate       DateTime
+  productName        String
+  productDescription String
+  productPrice       Float
+  productQuantity    Int
+  customerName       String
+  customerEmail      String?
+  customerPhone      String
+  customerAddress    String
+  invoiceNumber      String   @unique
+  invoiceUrl         String
+  profOfDelivery     String
+  //relations
+  userId             Int
+  user               User     @relation(fields: [userId], references: [id])
+
+  businessId Int
+  business   BusinessInfo @relation(fields: [businessId], references: [id])
+
+  linkCreated   LinkCreated[]
+  sellerReviews SellerReview[]
+  publicLinks   PublicLink[]
+}
+
+model LinkCreated {
+  id            Int           @id @default(autoincrement())
+  uuid          String        @unique @default(uuid()) @db.Uuid
+  link          String
+  createdAt     DateTime      @default(now())
+  expiry        DateTime
+  //Relations
+  orderId       Int
+  orderCreation OrderCreation @relation(fields: [orderId], references: [id])
+}
+
+enum ReviewEnum {
+  COMPLETED_AS_AGREED
+  COMPLETED_WITH_ISSUE
+  NOT_COMPLETED
+}
+
+model SellerReview {
+  id            Int           @id @default(autoincrement())
+  review        ReviewEnum
+  complain      String?
+  createdAt     DateTime      @default(now())
+  attachment    String?
+  orderUuid     String        @unique
+  score         Int           @default(0)
+  isReviewed    Boolean       @default(false)
+  //relations
+  orderId       Int           @unique
+  orderCreation OrderCreation @relation(fields: [orderId], references: [id])
+
+  disputes Disputes[]
+}
+
+model Disputes {
+  id             Int          @id @default(autoincrement())
+  issue          String
+  description    String?
+  attachment     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  //relations
+  sellerReviewId Int
+  sellerReview   SellerReview @relation(fields: [sellerReviewId], references: [id])
+}
+
+model Otp {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+enum PositionEnum {
+  UNVERIFIED
+  NEW
+  BUILDING
+  High
+  VERIFIED_PRO
+}
+
+//seller score model 
+model SellerScore {
+  id Int @id @default(autoincrement())
+
+  totalScore      Int          @default(0)
+  currentPosition PositionEnum @default(UNVERIFIED)
+
+  customerReviewAvg Float @default(0)
+  behaviourScore    Int   @default(0)
+  spamScore         Int   @default(0)
+  verificationScore Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  behaviourLogs SellerBehaviourLog[]
+  spamLogs      SpamLog[]
+}
+
+model UserVerificationScore {
+  id        Int      @id @default(autoincrement())
+  score     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  sellerScoreId Int @unique
+}
+
+model BusinessVerification {
+  id Int @id @default(autoincrement())
+
+  tradeLicense      Boolean @default(false)
+  nidVerified       Boolean @default(false)
+  addressVerified   Boolean @default(false)
+  warehouseVerified Boolean @default(false)
+
+  verificationScore Int
+  verifiedAt        DateTime?
+
+  businessId Int          @unique
+  business   BusinessInfo @relation(fields: [businessId], references: [id])
+}
+
+enum SpamType {
+  FAKE_REVIEW
+  MULTIPLE_ACCOUNTS
+  FRAUD_LINK
+  PAYMENT_SCAM
+}
+
+model SpamLog {
+  id          Int      @id @default(autoincrement())
+  type        SpamType
+  scoreImpact Int // negative
+  detectedBy  String? // system / admin / AI
+  createdAt   DateTime @default(now())
+
+  sellerScoreId Int
+  sellerScore   SellerScore @relation(fields: [sellerScoreId], references: [id])
+}
+
+enum BehaviourType {
+  LATE_DELIVERY
+  ORDER_CANCELLED
+  CUSTOMER_SUPPORT_GOOD
+  CUSTOMER_SUPPORT_BAD
+  POLICY_VIOLATION
+}
+
+model SellerBehaviourLog {
+  id          Int           @id @default(autoincrement())
+  type        BehaviourType
+  scoreImpact Int // + or -
+  reason      String?
+  createdAt   DateTime      @default(now())
+
+  sellerScoreId Int
+  sellerScore   SellerScore @relation(fields: [sellerScoreId], references: [id])
+}

@@ -1,3 +1,6 @@
+import { ItemsModule } from './items/items.module';
+import { ItemsController } from './items/items.controller';
+import { ItemsService } from './items/items.service';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -11,6 +14,7 @@ import { MailModule } from './mail/mail.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 @Module({
   imports: [
+    ItemsModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -53,7 +57,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     AuthModule,
     MailModule,
   ],
-  controllers: [AppController],
-  providers: [AppService, PrismaService],
+  controllers: [ItemsController, AppController],
+  providers: [ItemsService, AppService, PrismaService],
 })
 export class AppModule {}

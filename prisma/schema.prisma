@@ -25,8 +25,9 @@ model BusinessType {
 
   businesses Business[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  categories Category[]
 }
 
 model Business {
@@ -213,18 +214,25 @@ model PartyLedger {
 }
 
 model Category {
-  id          String   @id @default(cuid())
-  businessId  String
-  name        String
-  nameBn      String?
-  description String?
-  parentId    String?
-  itemCount   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  items       Item[]
+  id             String   @id @default(cuid())
+  businessTypeId String? // null = global (applies to all types)
+  businessId     String? // null = template, set = custom business category
+  name           String
+  nameBn         String?
+  description    String?
+  parentId       String?
+  itemCount      Int      @default(0)
+  isTemplate     Boolean  @default(false) // true = seeded template
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  businessType BusinessType? @relation(fields: [businessTypeId], references: [id])
+  business     Business?     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items        Item[]
+
+  @@unique([businessTypeId, name]) // prevent duplicate template names per type
+  @@unique([businessId, name]) // prevent duplicate names per business
+  @@index([businessTypeId])
   @@index([businessId])
 }
 

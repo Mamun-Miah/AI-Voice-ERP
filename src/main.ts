@@ -69,6 +69,6 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config));
 
   app.enableShutdownHooks();
-  await app.listen(process.env.PORT ?? 5000);
+  await app.listen(process.env.PORT ?? 8000);
 }
 void bootstrap();

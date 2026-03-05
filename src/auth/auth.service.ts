@@ -327,4 +327,24 @@ export class AuthService {
       },
     };
   }
+
+  async getBusinessTypes() {
+    const types = await this.prisma.businessType.findMany({
+      select: {
+        id: true,
+        value: true,
+        labelEn: true,
+        labelBn: true,
+        isActive: true,
+      },
+      where: {
+        isActive: true, // optional: only active types
+      },
+    });
+
+    return {
+      success: true,
+      data: types,
+    };
+  }
 }

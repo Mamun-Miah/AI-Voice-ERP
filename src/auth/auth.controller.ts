@@ -128,4 +128,14 @@ export class AuthController {
     response.clearCookie('Authentication', AUTH_COOKIE_OPTIONS);
     return { success: true, message: 'Logout successful' };
   }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @Get('business-types')
+  @ApiOperation({ summary: 'Get list of business types' })
+  @ApiResponse({ status: 200, description: 'Business types retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getBusinessTypes() {
+    return this.authService.getBusinessTypes();
+  }
 }

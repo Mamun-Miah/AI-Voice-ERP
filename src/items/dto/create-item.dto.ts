@@ -32,6 +32,9 @@ export class CreateItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ApiProperty({
+    example: 'cmmd6ycl8000cuufbk3xp1kfy',
+  })
   @IsString()
   categoryId?: string;
 

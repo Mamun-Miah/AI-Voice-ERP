@@ -19,6 +19,7 @@ import { ItemsService } from './items.service';
 import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { QueryItemDto } from './dto/query-item.dto';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
@@ -38,9 +39,9 @@ export class ItemsController {
     return this.itemsService.findAll(user.businessId, query);
   }
 
-  // GET /items/:id
+  // GET /items/:id  — includes last 10 stockHistory entries
   @Get(':id')
-  @ApiOperation({ summary: 'Get a single item by ID' })
+  @ApiOperation({ summary: 'Get a single item with recent stock history' })
   @ApiResponse({ status: 200, description: 'Item retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Item not found' })
   findOne(@GetUser() user: JwtUser, @Param('id') id: string) {
@@ -57,9 +58,9 @@ export class ItemsController {
     return this.itemsService.create(user.businessId, user.id, dto);
   }
 
-  // PATCH /items/:id
+  // PATCH /items/:id  — update item fields only (no stock here)
   @Patch(':id')
-  @ApiOperation({ summary: 'Update an existing item' })
+  @ApiOperation({ summary: 'Update item fields' })
   @ApiResponse({ status: 200, description: 'Item updated successfully' })
   @ApiResponse({ status: 404, description: 'Item not found' })
   @ApiResponse({ status: 409, description: 'Duplicate SKU' })
@@ -68,10 +69,27 @@ export class ItemsController {
     @Param('id') id: string,
     @Body() dto: UpdateItemDto,
   ) {
-    return this.itemsService.update(user.businessId, id, dto);
+    return this.itemsService.update(user.businessId, id, user.id, dto);
   }
 
-  // DELETE /items/:id  (soft delete)
+  // PATCH /items/:id/stock-adjust
+  // Positive stockAdjustment = add stock, negative = reduce stock
+  @Patch(':id/stock-adjust')
+  @ApiOperation({
+    summary: 'Adjust item stock (positive to add, negative to reduce)',
+  })
+  @ApiResponse({ status: 200, description: 'Stock adjusted successfully' })
+  @ApiResponse({ status: 400, description: 'Would result in negative stock' })
+  @ApiResponse({ status: 404, description: 'Item not found' })
+  adjustStock(
+    @GetUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: StockAdjustmentDto,
+  ) {
+    return this.itemsService.adjustStock(user.businessId, id, user.id, dto);
+  }
+
+  // DELETE /items/:id  — soft delete
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete an item (sets isActive = false)' })
   @ApiResponse({ status: 200, description: 'Item deleted successfully' })
@@ -80,9 +98,9 @@ export class ItemsController {
     return this.itemsService.remove(user.businessId, id);
   }
 
-  // GET /items/:id/stock-ledger
+  // GET /items/:id/stock-ledger  — full history (last 100)
   @Get(':id/stock-ledger')
-  @ApiOperation({ summary: 'Get stock movement history for an item' })
+  @ApiOperation({ summary: 'Get full stock movement history for an item' })
   @ApiResponse({ status: 200, description: 'Stock ledger retrieved' })
   @ApiResponse({ status: 404, description: 'Item not found' })
   getStockLedger(@GetUser() user: JwtUser, @Param('id') id: string) {

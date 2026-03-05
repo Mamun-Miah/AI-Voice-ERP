@@ -2,12 +2,14 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { QueryItemDto } from './dto/query-item.dto';
+import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
 import { Prisma } from '@prisma/client';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,18 +65,6 @@ export class ItemsService {
       where.OR = [{ branchId: query.branchId }, { branchId: null }];
     }
 
-    // Low-stock filter: currentStock <= minStock (Prisma doesn't support
-    // column-to-column comparison directly, so we use a raw filter via AND)
-    if (query.lowStock === 'true') {
-      // Prisma workaround: use $queryRaw or filter in JS — here we use a
-      // dedicated approach: fetch all matching and post-filter.
-      // For small result sets this is fine; for large ones consider raw SQL.
-      where.AND = [
-        // Prisma v5 supports column references via `Prisma.sql` in raw queries.
-        // For the ORM approach we keep it simple and add a post-filter below.
-      ];
-    }
-
     const [items, total] = await Promise.all([
       this.prisma.item.findMany({
         where,
@@ -88,11 +78,13 @@ export class ItemsService {
       this.prisma.item.count({ where }),
     ]);
 
-    // Post-filter for low stock (Prisma ORM limitation on column comparisons)
+    // Post-filter for low stock (Prisma ORM can't compare two columns natively)
     const filtered =
       query.lowStock === 'true'
         ? items.filter((i) => i.currentStock <= i.minStock)
         : items;
+
+    const filteredTotal = query.lowStock === 'true' ? filtered.length : total;
 
     return {
       success: true,
@@ -100,18 +92,17 @@ export class ItemsService {
       meta: {
         page,
         limit,
-        total: query.lowStock === 'true' ? filtered.length : total,
-        totalPages: Math.ceil(
-          (query.lowStock === 'true' ? filtered.length : total) / limit,
-        ),
+        total: filteredTotal,
+        totalPages: Math.ceil(filteredTotal / limit),
       },
     };
   }
 
   // ─── GET ONE ───────────────────────────────────────────────────────────────
+  // Matches Next.js GET /api/items/[id] — includes last 10 stock history entries
   async findOne(businessId: string, id: string) {
     const item = await this.prisma.item.findFirst({
-      where: { id, businessId, isActive: true },
+      where: { id, businessId },
       include: {
         category: { select: { id: true, name: true, nameBn: true } },
       },
@@ -121,15 +112,24 @@ export class ItemsService {
       throw new NotFoundException(`Item ${id} not found.`);
     }
 
+    const stockHistory = await this.prisma.stockLedger.findMany({
+      where: { itemId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+
     return {
       success: true,
-      data: { ...item, ...calcFields(item) },
+      data: {
+        ...item,
+        ...calcFields(item),
+        stockHistory,
+      },
     };
   }
 
   // ─── CREATE ────────────────────────────────────────────────────────────────
   async create(businessId: string, userId: string | null, dto: CreateItemDto) {
-    // Guard: duplicate SKU
     if (dto.sku) {
       const existing = await this.prisma.item.findFirst({
         where: { businessId, sku: dto.sku },
@@ -193,8 +193,13 @@ export class ItemsService {
   }
 
   // ─── UPDATE ────────────────────────────────────────────────────────────────
-  async update(businessId: string, id: string, dto: UpdateItemDto) {
-    // Ensure item belongs to this business
+  // Matches Next.js PATCH /api/items/[id] — also handles stockAdjustment
+  async update(
+    businessId: string,
+    id: string,
+    userId: string | null,
+    dto: UpdateItemDto,
+  ) {
     const existing = await this.prisma.item.findFirst({
       where: { id, businessId },
     });
@@ -202,7 +207,7 @@ export class ItemsService {
       throw new NotFoundException(`Item ${id} not found.`);
     }
 
-    // Guard: duplicate SKU (if changing)
+    // Guard: duplicate SKU if changing
     if (dto.sku && dto.sku !== existing.sku) {
       const skuTaken = await this.prisma.item.findFirst({
         where: { businessId, sku: dto.sku, id: { not: id } },
@@ -253,6 +258,64 @@ export class ItemsService {
     };
   }
 
+  // ─── STOCK ADJUSTMENT ─────────────────────────────────────────────────────
+  // Matches Next.js PATCH stockAdjustment logic — separated into its own endpoint
+  async adjustStock(
+    businessId: string,
+    id: string,
+    userId: string | null,
+    dto: StockAdjustmentDto,
+  ) {
+    const item = await this.prisma.item.findFirst({
+      where: { id, businessId },
+    });
+    if (!item) {
+      throw new NotFoundException(`Item ${id} not found.`);
+    }
+
+    const previousStock = item.currentStock;
+    const newStock = previousStock + dto.stockAdjustment;
+
+    if (newStock < 0) {
+      throw new BadRequestException(
+        `Adjustment would result in negative stock (${newStock}).`,
+      );
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.item.update({
+        where: { id },
+        data: { currentStock: newStock },
+        include: {
+          category: { select: { id: true, name: true, nameBn: true } },
+        },
+      }),
+      this.prisma.stockLedger.create({
+        data: {
+          businessId,
+          itemId: id,
+          type: dto.stockAdjustment > 0 ? 'purchase' : 'sale',
+          quantity: Math.abs(dto.stockAdjustment),
+          previousStock,
+          newStock,
+          referenceType: 'adjustment',
+          reason: dto.adjustmentReason ?? 'Manual adjustment',
+          createdBy: userId,
+        },
+      }),
+    ]);
+
+    this.logger.info(
+      { itemId: id, businessId, previousStock, newStock },
+      'Stock adjusted',
+    );
+
+    return {
+      success: true,
+      data: { ...updated, ...calcFields(updated) },
+    };
+  }
+
   // ─── SOFT DELETE ───────────────────────────────────────────────────────────
   async remove(businessId: string, id: string) {
     const existing = await this.prisma.item.findFirst({
@@ -269,12 +332,11 @@ export class ItemsService {
 
     this.logger.info({ itemId: id, businessId }, 'Item soft-deleted');
 
-    return { success: true, message: 'Item deleted successfully.' };
+    return { success: true, data: { id } };
   }
 
-  // ─── STOCK LEDGER ──────────────────────────────────────────────────────────
+  // ─── STOCK LEDGER (full history) ───────────────────────────────────────────
   async getStockLedger(businessId: string, itemId: string) {
-    // Verify item ownership
     const item = await this.prisma.item.findFirst({
       where: { id: itemId, businessId },
     });

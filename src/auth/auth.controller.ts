@@ -129,12 +129,13 @@ export class AuthController {
     return { success: true, message: 'Logout successful' };
   }
 
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
   @Get('business-types')
   @ApiOperation({ summary: 'Get list of business types' })
   @ApiResponse({ status: 200, description: 'Business types retrieved' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 401,
+    description: 'Failed to retrieve business types',
+  })
   getBusinessTypes() {
     return this.authService.getBusinessTypes();
   }

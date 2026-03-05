@@ -1,6 +1,6 @@
 # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # must update cors in the main ts
-DATABASE_URL="postgresql://postgres:12345678@localhost:5432/postgres"
+DATABASE_URL="postgresql://postgres:12345678@localhost:5432/voiceerp"
 JWT_SECRET=34a537424e6b06640c1b1754bb03f9685833de0609fff08cb3c0796bc6f9c309
 JWT_EXPIRES_IN=1d
 NODE_ENV=development

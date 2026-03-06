@@ -60,7 +60,6 @@ model Business {
   partyCategories   PartyCategory[]
   partyLedger       PartyLedger[]
   payments          Payment[]
-  purchases         Purchase[]
   quotations        Quotation[]
   sales             Sale[]
   stockLedger       StockLedger[]
@@ -117,26 +116,25 @@ model Otp {
 }
 
 model Branch {
-  id          String     @id @default(cuid())
+  id          String    @id @default(cuid())
   businessId  String
   name        String
   nameBn      String?
-  type        String     @default("main")
+  type        String    @default("main")
   address     String?
   phone       String?
   managerId   String?
-  isActive    Boolean    @default(true)
-  isMain      Boolean    @default(false)
-  openingCash Float      @default(0)
-  currentCash Float      @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  isActive    Boolean   @default(true)
+  isMain      Boolean   @default(false)
+  openingCash Float     @default(0)
+  currentCash Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   accounts    Account[]
-  business    Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   expenses    Expense[]
   items       Item[]
   parties     Party[]
-  purchases   Purchase[]
   sales       Sale[]
   users       User[]
 
@@ -184,7 +182,6 @@ model Party {
   business        Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   partyLedger     PartyLedger[]
   payments        Payment[]
-  purchases       Purchase[]
   sales           Sale[]
 
   @@index([businessId])
@@ -237,7 +234,7 @@ model Category {
 }
 
 model Item {
-  id               String         @id @default(cuid())
+  id               String        @id @default(cuid())
   businessId       String
   branchId         String?
   categoryId       String?
@@ -246,26 +243,25 @@ model Item {
   sku              String?
   barcode          String?
   description      String?
-  unit             String         @default("pcs")
-  costPrice        Float          @default(0)
-  sellingPrice     Float          @default(0)
+  unit             String        @default("pcs")
+  costPrice        Float         @default(0)
+  sellingPrice     Float         @default(0)
   wholesalePrice   Float?
   vipPrice         Float?
   minimumPrice     Float?
-  currentStock     Float          @default(0)
-  minStock         Float          @default(0)
+  currentStock     Float         @default(0)
+  minStock         Float         @default(0)
   maxStock         Float?
   supplierId       String?
   imageUrl         String?
-  isActive         Boolean        @default(true)
+  isActive         Boolean       @default(true)
   lastPurchaseDate DateTime?
   lastSaleDate     DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  category         Category?      @relation(fields: [categoryId], references: [id])
-  branch           Branch?        @relation(fields: [branchId], references: [id])
-  business         Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  purchaseItems    PurchaseItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  category         Category?     @relation(fields: [categoryId], references: [id])
+  branch           Branch?       @relation(fields: [branchId], references: [id])
+  business         Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   saleItems        SaleItem[]
   stockLedger      StockLedger[]
 
@@ -351,49 +347,6 @@ model SaleItem {
   @@index([itemId])
 }
 
-model Purchase {
-  id         String         @id @default(cuid())
-  businessId String
-  branchId   String?
-  supplierId String?
-  invoiceNo  String?
-  subtotal   Float
-  discount   Float          @default(0)
-  tax        Float          @default(0)
-  total      Float
-  paidAmount Float          @default(0)
-  dueAmount  Float          @default(0)
-  status     String         @default("received")
-  notes      String?
-  createdBy  String?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
-  supplier   Party?         @relation(fields: [supplierId], references: [id])
-  branch     Branch?        @relation(fields: [branchId], references: [id])
-  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  items      PurchaseItem[]
-
-  @@index([businessId])
-  @@index([supplierId])
-  @@index([createdAt])
-}
-
-model PurchaseItem {
-  id         String   @id @default(cuid())
-  purchaseId String
-  itemId     String
-  itemName   String
-  quantity   Float
-  unitCost   Float
-  total      Float
-  createdAt  DateTime @default(now())
-  item       Item     @relation(fields: [itemId], references: [id])
-  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-
-  @@index([purchaseId])
-  @@index([itemId])
-}
-
 model Payment {
   id         String   @id @default(cuid())
   businessId String
@@ -420,7 +373,7 @@ model Payment {
 
 model ExpenseCategory {
   id         String    @id @default(cuid())
-  businessId String
+  businessId String?
   name       String
   nameBn     String?
   icon       String?
@@ -429,9 +382,10 @@ model ExpenseCategory {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   expenses   Expense[]
-  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
-  @@index([businessId])
+  @@unique([businessId, name])
+  @@index([businessId, name])
 }
 
 model Expense {

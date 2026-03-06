@@ -270,7 +270,31 @@ const categoryTemplates: Record<
     },
   ],
 };
-
+const DEFAULT_CATEGORIES = [
+  { name: 'Rent', nameBn: 'ভাড়া', icon: 'home', color: '#4F46E5' },
+  { name: 'Utilities', nameBn: 'ইউটিলিটি', icon: 'zap', color: '#F59E0B' },
+  { name: 'Salaries', nameBn: 'বেতন', icon: 'users', color: '#10B981' },
+  { name: 'Supplies', nameBn: 'সাপ্লাই', icon: 'package', color: '#6366F1' },
+  { name: 'Transport', nameBn: 'পরিবহন', icon: 'truck', color: '#EC4899' },
+  {
+    name: 'Marketing',
+    nameBn: 'মার্কেটিং',
+    icon: 'megaphone',
+    color: '#8B5CF6',
+  },
+  {
+    name: 'Maintenance',
+    nameBn: 'রক্ষণাবেক্ষণ',
+    icon: 'tool',
+    color: '#14B8A6',
+  },
+  {
+    name: 'Other',
+    nameBn: 'অন্যান্য',
+    icon: 'more-horizontal',
+    color: '#6B7280',
+  },
+];
 // ─── Business Types ───────────────────────────────────────────────────────────
 const businessTypes = [
   { value: 'retail', labelEn: 'Retail', labelBn: 'খুচরা' },
@@ -300,7 +324,25 @@ async function main() {
     });
   }
   console.log('Seeded business types ✅');
+  // 3. Seed default expense categories
+  for (const category of DEFAULT_CATEGORIES) {
+    await prisma.expenseCategory.upsert({
+      where: {
+        businessId_name: {
+          businessId: 'null',
+          name: category.name,
+        },
+      },
+      update: {},
+      create: {
+        ...category,
+        businessId: null, // global category
+        isDefault: true,
+      },
+    });
+  }
 
+  console.log(`Seeded ${DEFAULT_CATEGORIES.length} expense categories ✅`);
   // 2. Seed template categories scoped to each business type
   for (const [typeValue, categories] of Object.entries(categoryTemplates)) {
     const businessType = await prisma.businessType.findUnique({

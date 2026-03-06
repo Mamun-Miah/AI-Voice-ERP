@@ -40,6 +40,20 @@ export class SalesController {
     return this.salesService.findAll(user.businessId, query);
   }
 
+  // GET /sales/summary  — dashboard stats card data
+  // IMPORTANT: declared before :id route to avoid param capture
+  @Get('summary')
+  @ApiOperation({
+    summary: 'Sales summary stats',
+    description:
+      "Returns today's sales, this month's sales, all-time totals, " +
+      'average sale value, and count — each with a change % vs the previous period.',
+  })
+  @ApiResponse({ status: 200, description: 'Summary retrieved successfully' })
+  getSummary(@GetUser() user: JwtUser) {
+    return this.salesService.getSummary(user.businessId);
+  }
+
   // GET /sales/:id
   @Get(':id')
   @ApiOperation({

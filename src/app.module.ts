@@ -15,8 +15,12 @@ import * as Joi from 'joi';
 import { LoggerModule } from 'nestjs-pino/LoggerModule';
 import { MailModule } from './mail/mail.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ExpensesModule } from './expenses/expenses.module';
+import { ExpensesController } from './expenses/expenses.controller';
+import { ExpensesService } from './expenses/expenses.service';
 @Module({
   imports: [
+    ExpensesModule,
     SalesModule,
     ItemsModule,
     ThrottlerModule.forRoot([
@@ -61,7 +65,18 @@ import { ThrottlerModule } from '@nestjs/throttler';
     AuthModule,
     MailModule,
   ],
-  controllers: [SalesController, ItemsController, AppController],
-  providers: [SalesService, ItemsService, AppService, PrismaService],
+  controllers: [
+    ExpensesController,
+    SalesController,
+    ItemsController,
+    AppController,
+  ],
+  providers: [
+    ExpensesService,
+    SalesService,
+    ItemsService,
+    AppService,
+    PrismaService,
+  ],
 })
 export class AppModule {}

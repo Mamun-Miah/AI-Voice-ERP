@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -16,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { EditSaleDto } from './dto/edit-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -60,10 +63,37 @@ export class SalesController {
     return this.salesService.create(user.businessId, user.id, dto);
   }
 
-  // PATCH /sales/:id  — status updates (cancel / return / complete)
+  // PUT /sales/:id  — full edit (items, amounts, party, payment)
+  @Put(':id')
+  @ApiOperation({
+    summary: 'Edit a sale — replaces items and recalculates all totals',
+    description:
+      'Supply only the fields you want to change. If `items` is provided, ' +
+      'old items are reversed and replaced entirely. Stock and party ledger ' +
+      'are reconciled automatically. Cannot edit cancelled or returned sales.',
+  })
+  @ApiResponse({ status: 200, description: 'Sale edited successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or insufficient stock',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Cannot edit a cancelled or returned sale',
+  })
+  @ApiResponse({ status: 404, description: 'Sale not found' })
+  editSale(
+    @GetUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: EditSaleDto,
+  ) {
+    return this.salesService.editSale(user.businessId, id, user.id, dto);
+  }
+
+  // PATCH /sales/:id  — status-only update (cancel / return / complete)
   @Patch(':id')
   @ApiOperation({ summary: 'Update sale status (cancel, return, complete)' })
-  @ApiResponse({ status: 200, description: 'Sale updated successfully' })
+  @ApiResponse({ status: 200, description: 'Sale status updated successfully' })
   @ApiResponse({
     status: 403,
     description: 'Cannot modify a cancelled or returned sale',
@@ -75,5 +105,23 @@ export class SalesController {
     @Body() dto: UpdateSaleDto,
   ) {
     return this.salesService.update(user.businessId, id, user.id, dto);
+  }
+
+  // DELETE /sales/:id  — soft delete (cancels sale, restores stock)
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a sale (soft delete)',
+    description:
+      'Marks the sale as cancelled, restores stock for all items, ' +
+      'and reverses the party ledger entry for any outstanding due amount.',
+  })
+  @ApiResponse({ status: 200, description: 'Sale deleted successfully' })
+  @ApiResponse({
+    status: 403,
+    description: 'Sale is already cancelled or returned',
+  })
+  @ApiResponse({ status: 404, description: 'Sale not found' })
+  remove(@GetUser() user: JwtUser, @Param('id') id: string) {
+    return this.salesService.remove(user.businessId, id, user.id);
   }
 }

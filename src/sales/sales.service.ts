@@ -8,12 +8,11 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Prisma } from '@prisma/client';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { EditSaleDto } from './dto/edit-sale.dto';
 import { UpdateSaleDto, SaleStatus } from './dto/update-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
 
 // ─── Prisma result types ──────────────────────────────────────────────────────
-// These mirror the exact `include` shapes used in each query so the
-// transformer functions are fully typed — no `any` anywhere.
 
 const listSaleInclude = {
   items: {
@@ -161,9 +160,7 @@ export class SalesService {
 
     if (query.startDate || query.endDate) {
       where.createdAt = {};
-      if (query.startDate) {
-        where.createdAt.gte = new Date(query.startDate);
-      }
+      if (query.startDate) where.createdAt.gte = new Date(query.startDate);
       if (query.endDate) {
         const end = new Date(query.endDate);
         end.setHours(23, 59, 59, 999);
@@ -192,12 +189,7 @@ export class SalesService {
     return {
       success: true,
       data: sales.map(transformListSale),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
@@ -226,7 +218,6 @@ export class SalesService {
       notes,
     } = dto;
 
-    // 1. Validate all items exist and belong to this business
     const itemIds = items.map((i) => i.itemId);
     const dbItems = await this.prisma.item.findMany({
       where: { id: { in: itemIds }, businessId },
@@ -240,23 +231,18 @@ export class SalesService {
 
     const itemMap = new Map(dbItems.map((i) => [i.id, i]));
 
-    // 2. Validate stock and build sale items payload
     const saleItemsData = items.map((input) => {
       const dbItem = itemMap.get(input.itemId)!;
-
       if (dbItem.currentStock < input.quantity) {
         throw new BadRequestException(
           `Insufficient stock for "${dbItem.name}". Available: ${dbItem.currentStock}, Requested: ${input.quantity}`,
         );
       }
-
       const itemDiscount = input.discount ?? 0;
       const itemTotal = input.quantity * input.unitPrice - itemDiscount;
       const itemProfit =
         (input.unitPrice - dbItem.costPrice) * input.quantity - itemDiscount;
-
       return {
-        // fields written to DB
         itemId: dbItem.id,
         itemName: input.itemName ?? dbItem.name,
         quantity: input.quantity,
@@ -265,19 +251,16 @@ export class SalesService {
         discount: itemDiscount,
         total: itemTotal,
         profit: itemProfit,
-        // helpers used for stock ledger — stripped before Prisma create
         _previousStock: dbItem.currentStock,
         _newStock: dbItem.currentStock - input.quantity,
       };
     });
 
-    // 3. Compute sale totals
     const subtotal = saleItemsData.reduce((sum, i) => sum + i.total, 0);
     const totalProfit = saleItemsData.reduce((sum, i) => sum + i.profit, 0);
     const total = subtotal - discount + tax;
     const dueAmount = total - paidAmount;
 
-    // 4. Run everything in a single transaction
     const sale = await this.prisma.$transaction(async (tx) => {
       const invoiceNo = await generateInvoiceNo(tx, businessId);
 
@@ -299,7 +282,6 @@ export class SalesService {
           notes: notes ?? null,
           createdBy: userId,
           items: {
-            // strip the underscore helper fields before writing
             create: saleItemsData.map((item) => ({
               itemId: item.itemId,
               itemName: item.itemName,
@@ -315,13 +297,11 @@ export class SalesService {
         include: listSaleInclude,
       });
 
-      // Update stock + ledger for each item
       for (const itemData of saleItemsData) {
         await tx.item.update({
           where: { id: itemData.itemId },
           data: { currentStock: itemData._newStock, lastSaleDate: new Date() },
         });
-
         await tx.stockLedger.create({
           data: {
             businessId,
@@ -337,7 +317,6 @@ export class SalesService {
         });
       }
 
-      // Party ledger entry for credit sales
       if (partyId && dueAmount > 0) {
         const party = await tx.party.findUnique({ where: { id: partyId } });
         if (party) {
@@ -362,15 +341,12 @@ export class SalesService {
         }
       }
 
-      // Update account balance for paid amount
       if (paidAmount > 0) {
         const accountMeta =
           ACCOUNT_TYPE_MAP[paymentMethod] ?? ACCOUNT_TYPE_MAP['cash'];
-
         let account = await tx.account.findFirst({
           where: { businessId, type: accountMeta.type },
         });
-
         if (!account) {
           account = await tx.account.create({
             data: {
@@ -384,7 +360,6 @@ export class SalesService {
             },
           });
         }
-
         await tx.account.update({
           where: { id: account.id },
           data: { currentBalance: account.currentBalance + paidAmount },
@@ -398,7 +373,6 @@ export class SalesService {
       { saleId: sale.id, businessId, invoiceNo: sale.invoiceNo },
       'Sale created',
     );
-
     return { success: true, data: transformListSale(sale) };
   }
 
@@ -416,10 +390,7 @@ export class SalesService {
 
     if (!existing) throw new NotFoundException(`Sale ${id} not found.`);
 
-    // Cast Prisma's string status to the enum for safe comparisons
     const existingStatus = existing.status as SaleStatus;
-
-    // Guard: can't modify already cancelled/returned
     if (
       existingStatus === SaleStatus.CANCELLED ||
       existingStatus === SaleStatus.RETURNED
@@ -430,21 +401,17 @@ export class SalesService {
     const { status, notes } = dto;
 
     const sale = await this.prisma.$transaction(async (tx) => {
-      // Reverse stock + party ledger on cancel/return
       if (status === SaleStatus.CANCELLED || status === SaleStatus.RETURNED) {
         for (const saleItem of existing.items) {
           const item = await tx.item.findUnique({
             where: { id: saleItem.itemId },
           });
           if (!item) continue;
-
           const restoredStock = item.currentStock + saleItem.quantity;
-
           await tx.item.update({
             where: { id: saleItem.itemId },
             data: { currentStock: restoredStock },
           });
-
           await tx.stockLedger.create({
             data: {
               businessId,
@@ -464,7 +431,6 @@ export class SalesService {
           });
         }
 
-        // Reverse party ledger for credit sales
         if (existing.partyId && existing.dueAmount > 0) {
           const party = await tx.party.findUnique({
             where: { id: existing.partyId },
@@ -502,8 +468,332 @@ export class SalesService {
       });
     });
 
-    this.logger.info({ saleId: id, businessId, status }, 'Sale updated');
-
+    this.logger.info({ saleId: id, businessId, status }, 'Sale status updated');
     return { success: true, data: transformListSale(sale) };
+  }
+
+  // ─── EDIT SALE ─────────────────────────────────────────────────────────────
+  // Replaces items entirely and recalculates all totals.
+  // Strategy:
+  //   1. Restore stock from old items
+  //   2. Validate + deduct stock for new items
+  //   3. Delete old SaleItems, insert new ones
+  //   4. Recalculate Sale totals
+  //   5. Reconcile party ledger for the due-amount diff
+  async editSale(
+    businessId: string,
+    id: string,
+    userId: string | null,
+    dto: EditSaleDto,
+  ) {
+    const existing = await this.prisma.sale.findFirst({
+      where: { id, businessId },
+      include: { items: true },
+    });
+
+    if (!existing) throw new NotFoundException(`Sale ${id} not found.`);
+
+    const existingStatus = existing.status as SaleStatus;
+    if (
+      existingStatus === SaleStatus.CANCELLED ||
+      existingStatus === SaleStatus.RETURNED
+    ) {
+      throw new ForbiddenException(`Cannot edit a ${existing.status} sale.`);
+    }
+
+    // Fall back to existing values for any omitted fields
+    const newPartyId =
+      dto.partyId !== undefined ? dto.partyId : existing.partyId;
+    const newDiscount =
+      dto.discount !== undefined ? dto.discount : existing.discount;
+    const newTax = dto.tax !== undefined ? dto.tax : existing.tax;
+    const newPaymentMethod =
+      dto.paymentMethod !== undefined
+        ? dto.paymentMethod
+        : existing.paymentMethod;
+    const newPaidAmount =
+      dto.paidAmount !== undefined ? dto.paidAmount : existing.paidAmount;
+    const newPricingTier =
+      dto.pricingTier !== undefined ? dto.pricingTier : existing.pricingTier;
+    const newNotes = dto.notes !== undefined ? dto.notes : existing.notes;
+
+    // Build typed item payload if new items were supplied
+    type SaleItemPayload = {
+      itemId: string;
+      itemName: string;
+      quantity: number;
+      unitPrice: number;
+      costPrice: number;
+      discount: number;
+      total: number;
+      profit: number;
+      _previousStock: number;
+      _newStock: number;
+    };
+
+    let saleItemsData: SaleItemPayload[] | null = null;
+
+    if (dto.items && dto.items.length > 0) {
+      const itemIds = dto.items.map((i) => i.itemId);
+      const dbItems = await this.prisma.item.findMany({
+        where: { id: { in: itemIds }, businessId },
+      });
+
+      if (dbItems.length !== itemIds.length) {
+        const foundIds = new Set(dbItems.map((i) => i.id));
+        const missing = itemIds.filter((i) => !foundIds.has(i));
+        throw new BadRequestException(`Items not found: ${missing.join(', ')}`);
+      }
+
+      const itemMap = new Map(dbItems.map((i) => [i.id, i]));
+
+      saleItemsData = dto.items.map((input) => {
+        const dbItem = itemMap.get(input.itemId)!;
+        const itemDiscount = input.discount ?? 0;
+        const itemTotal = input.quantity * input.unitPrice - itemDiscount;
+        const itemProfit =
+          (input.unitPrice - dbItem.costPrice) * input.quantity - itemDiscount;
+
+        // Account for stock the old sale was already holding for this item
+        const oldSaleQty =
+          existing.items.find((si) => si.itemId === dbItem.id)?.quantity ?? 0;
+        const availableStock = dbItem.currentStock + oldSaleQty;
+
+        if (availableStock < input.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for "${dbItem.name}". Available: ${availableStock}, Requested: ${input.quantity}`,
+          );
+        }
+
+        return {
+          itemId: dbItem.id,
+          itemName: input.itemName ?? dbItem.name,
+          quantity: input.quantity,
+          unitPrice: input.unitPrice,
+          costPrice: dbItem.costPrice,
+          discount: itemDiscount,
+          total: itemTotal,
+          profit: itemProfit,
+          _previousStock: dbItem.currentStock,
+          _newStock: availableStock - input.quantity,
+        };
+      });
+    }
+
+    const sale = await this.prisma.$transaction(async (tx) => {
+      if (saleItemsData) {
+        // Step 1 — Restore stock for all old items
+        for (const oldItem of existing.items) {
+          const dbItem = await tx.item.findUnique({
+            where: { id: oldItem.itemId },
+          });
+          if (!dbItem) continue;
+          const restoredStock = dbItem.currentStock + oldItem.quantity;
+          await tx.item.update({
+            where: { id: oldItem.itemId },
+            data: { currentStock: restoredStock },
+          });
+          await tx.stockLedger.create({
+            data: {
+              businessId,
+              itemId: oldItem.itemId,
+              type: 'adjustment',
+              quantity: oldItem.quantity,
+              previousStock: dbItem.currentStock,
+              newStock: restoredStock,
+              referenceId: existing.id,
+              referenceType: 'sale',
+              reason: 'Sale edited — old items reversed',
+              createdBy: userId,
+            },
+          });
+        }
+
+        // Step 2 — Delete old SaleItems
+        await tx.saleItem.deleteMany({ where: { saleId: id } });
+
+        // Step 3 — Create new SaleItems and deduct stock
+        for (const itemData of saleItemsData) {
+          await tx.saleItem.create({
+            data: {
+              saleId: id,
+              itemId: itemData.itemId,
+              itemName: itemData.itemName,
+              quantity: itemData.quantity,
+              unitPrice: itemData.unitPrice,
+              costPrice: itemData.costPrice,
+              discount: itemData.discount,
+              total: itemData.total,
+              profit: itemData.profit,
+            },
+          });
+          await tx.item.update({
+            where: { id: itemData.itemId },
+            data: {
+              currentStock: itemData._newStock,
+              lastSaleDate: new Date(),
+            },
+          });
+          await tx.stockLedger.create({
+            data: {
+              businessId,
+              itemId: itemData.itemId,
+              type: 'sale',
+              quantity: -itemData.quantity,
+              previousStock: itemData._previousStock,
+              newStock: itemData._newStock,
+              referenceId: id,
+              referenceType: 'sale',
+              reason: 'Sale edited — new items applied',
+              createdBy: userId,
+            },
+          });
+        }
+      }
+
+      // Step 4 — Recalculate totals
+      const itemsForCalc = saleItemsData ?? existing.items;
+      const newSubtotal = itemsForCalc.reduce((sum, i) => sum + i.total, 0);
+      const newTotalProfit = itemsForCalc.reduce((sum, i) => sum + i.profit, 0);
+      const newTotal = newSubtotal - newDiscount + newTax;
+      const newDueAmount = newTotal - newPaidAmount;
+
+      // Step 5 — Reconcile party ledger (only write if due amount changed)
+      if (newPartyId) {
+        const dueDiff = newDueAmount - existing.dueAmount;
+        if (dueDiff !== 0) {
+          const party = await tx.party.findUnique({
+            where: { id: newPartyId },
+          });
+          if (party) {
+            const newBalance = party.currentBalance + dueDiff;
+            await tx.party.update({
+              where: { id: newPartyId },
+              data: { currentBalance: newBalance },
+            });
+            await tx.partyLedger.create({
+              data: {
+                businessId,
+                partyId: newPartyId,
+                type: 'adjustment',
+                referenceId: id,
+                referenceType: 'sale',
+                amount: dueDiff,
+                balance: newBalance,
+                description: `Sale edited - Invoice ${existing.invoiceNo}`,
+                date: new Date(),
+              },
+            });
+          }
+        }
+      }
+
+      return tx.sale.update({
+        where: { id },
+        data: {
+          partyId: newPartyId,
+          subtotal: newSubtotal,
+          discount: newDiscount,
+          tax: newTax,
+          total: newTotal,
+          paidAmount: newPaidAmount,
+          dueAmount: newDueAmount,
+          paymentMethod: newPaymentMethod,
+          pricingTier: newPricingTier ?? null,
+          profit: newTotalProfit,
+          notes: newNotes ?? null,
+          status: newDueAmount > 0 ? 'pending' : 'completed',
+        },
+        include: listSaleInclude,
+      });
+    });
+
+    this.logger.info({ saleId: id, businessId }, 'Sale edited');
+    return { success: true, data: transformListSale(sale) };
+  }
+
+  // ─── DELETE (soft) ─────────────────────────────────────────────────────────
+  // Marks sale as cancelled, restores stock, reverses party ledger.
+  async remove(businessId: string, id: string, userId: string | null) {
+    const existing = await this.prisma.sale.findFirst({
+      where: { id, businessId },
+      include: { items: true },
+    });
+
+    if (!existing) throw new NotFoundException(`Sale ${id} not found.`);
+
+    const existingStatus = existing.status as SaleStatus;
+    if (
+      existingStatus === SaleStatus.CANCELLED ||
+      existingStatus === SaleStatus.RETURNED
+    ) {
+      throw new ForbiddenException(
+        `Sale is already ${existing.status} and cannot be deleted.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Restore stock for each item
+      for (const saleItem of existing.items) {
+        const item = await tx.item.findUnique({
+          where: { id: saleItem.itemId },
+        });
+        if (!item) continue;
+        const restoredStock = item.currentStock + saleItem.quantity;
+        await tx.item.update({
+          where: { id: saleItem.itemId },
+          data: { currentStock: restoredStock },
+        });
+        await tx.stockLedger.create({
+          data: {
+            businessId,
+            itemId: saleItem.itemId,
+            type: 'adjustment',
+            quantity: saleItem.quantity,
+            previousStock: item.currentStock,
+            newStock: restoredStock,
+            referenceId: existing.id,
+            referenceType: 'sale',
+            reason: 'Sale deleted',
+            createdBy: userId,
+          },
+        });
+      }
+
+      // Reverse party ledger for credit sales
+      if (existing.partyId && existing.dueAmount > 0) {
+        const party = await tx.party.findUnique({
+          where: { id: existing.partyId },
+        });
+        if (party) {
+          const newBalance = party.currentBalance - existing.dueAmount;
+          await tx.party.update({
+            where: { id: existing.partyId },
+            data: { currentBalance: newBalance },
+          });
+          await tx.partyLedger.create({
+            data: {
+              businessId,
+              partyId: existing.partyId,
+              type: 'adjustment',
+              referenceId: existing.id,
+              referenceType: 'sale',
+              amount: -existing.dueAmount,
+              balance: newBalance,
+              description: `Sale deleted - Invoice ${existing.invoiceNo}`,
+              date: new Date(),
+            },
+          });
+        }
+      }
+
+      await tx.sale.update({
+        where: { id },
+        data: { status: SaleStatus.CANCELLED },
+      });
+    });
+
+    this.logger.info({ saleId: id, businessId }, 'Sale deleted (soft)');
+    return { success: true, data: { id } };
   }
 }

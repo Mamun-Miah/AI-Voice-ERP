@@ -11,6 +11,7 @@ interface JwtPayload {
   phone: string;
   username?: string;
   role: string;
+  branchId: string;
   businessId: string;
   isPhoneVerified: boolean;
   iat?: number;
@@ -61,6 +62,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         name: true,
         role: true,
         businessId: true,
+        branchId: true,
         isPhoneVerified: true,
         isActive: true,
       },
@@ -80,6 +82,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       id: user.id,
       phone: user.phone,
+      branchId: user.branchId,
       name: user.name,
       role: user.role,
       businessId: user.businessId,

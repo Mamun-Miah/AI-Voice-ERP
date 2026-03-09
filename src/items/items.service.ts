@@ -39,12 +39,13 @@ export class ItemsService {
   ) {}
 
   // ─── LIST ──────────────────────────────────────────────────────────────────
-  async findAll(businessId: string, query: QueryItemDto) {
+  async findAll(businessId: string, branchId: string, query: QueryItemDto) {
     const page = parseInt(query.page ?? '1', 10);
     const limit = parseInt(query.limit ?? '50', 10);
 
     const where: Prisma.ItemWhereInput = {
       businessId,
+      branchId,
       isActive: true,
     };
 

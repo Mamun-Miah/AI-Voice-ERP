@@ -36,7 +36,7 @@ export class ItemsController {
   @ApiOperation({ summary: 'List items with optional filtering & pagination' })
   @ApiResponse({ status: 200, description: 'Items retrieved successfully' })
   findAll(@GetUser() user: JwtUser, @Query() query: QueryItemDto) {
-    return this.itemsService.findAll(user.businessId, query);
+    return this.itemsService.findAll(user.businessId, user.branchId, query);
   }
 
   // GET /items/:id  — includes last 10 stockHistory entries

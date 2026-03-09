@@ -1,6 +1,7 @@
 export type JwtUser = {
   sub: string; // Standard JWT subject (User ID)
   id: string; // Added for convenience
+  branchId: string;
   phone: string;
   username?: string;
   isPhoneVerified: boolean;

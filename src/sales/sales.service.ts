@@ -146,11 +146,11 @@ export class SalesService {
   ) {}
 
   // ─── LIST ──────────────────────────────────────────────────────────────────
-  async findAll(businessId: string, query: QuerySaleDto) {
+  async findAll(businessId: string, branchId: string, query: QuerySaleDto) {
     const page = parseInt(query.page ?? '1', 10);
     const limit = parseInt(query.limit ?? '20', 10);
 
-    const where: Prisma.SaleWhereInput = { businessId };
+    const where: Prisma.SaleWhereInput = { businessId, branchId };
 
     if (query.partyId) where.partyId = query.partyId;
 
@@ -194,9 +194,9 @@ export class SalesService {
   }
 
   // ─── GET ONE ───────────────────────────────────────────────────────────────
-  async findOne(businessId: string, id: string) {
+  async findOne(businessId: string, branchId: string, id: string) {
     const sale = await this.prisma.sale.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
       include: singleSaleInclude,
     });
 
@@ -206,7 +206,12 @@ export class SalesService {
   }
 
   // ─── CREATE ────────────────────────────────────────────────────────────────
-  async create(businessId: string, userId: string | null, dto: CreateSaleDto) {
+  async create(
+    businessId: string,
+    branchId: string,
+    userId: string | null,
+    dto: CreateSaleDto,
+  ) {
     const {
       partyId,
       items,
@@ -220,7 +225,7 @@ export class SalesService {
 
     const itemIds = items.map((i) => i.itemId);
     const dbItems = await this.prisma.item.findMany({
-      where: { id: { in: itemIds }, businessId },
+      where: { id: { in: itemIds }, businessId, branchId },
     });
 
     if (dbItems.length !== itemIds.length) {
@@ -345,7 +350,7 @@ export class SalesService {
         const accountMeta =
           ACCOUNT_TYPE_MAP[paymentMethod] ?? ACCOUNT_TYPE_MAP['cash'];
         let account = await tx.account.findFirst({
-          where: { businessId, type: accountMeta.type },
+          where: { businessId, branchId, type: accountMeta.type },
         });
         if (!account) {
           account = await tx.account.create({
@@ -379,12 +384,13 @@ export class SalesService {
   // ─── UPDATE STATUS ─────────────────────────────────────────────────────────
   async update(
     businessId: string,
+    branchId: string,
     id: string,
     userId: string | null,
     dto: UpdateSaleDto,
   ) {
     const existing = await this.prisma.sale.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
       include: { items: true, party: true },
     });
 
@@ -468,7 +474,10 @@ export class SalesService {
       });
     });
 
-    this.logger.info({ saleId: id, businessId, status }, 'Sale status updated');
+    this.logger.info(
+      { saleId: id, businessId, branchId, status },
+      'Sale status updated',
+    );
     return { success: true, data: transformListSale(sale) };
   }
 
@@ -482,12 +491,13 @@ export class SalesService {
   //   5. Reconcile party ledger for the due-amount diff
   async editSale(
     businessId: string,
+    branchId: string,
     id: string,
     userId: string | null,
     dto: EditSaleDto,
   ) {
     const existing = await this.prisma.sale.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
       include: { items: true },
     });
 
@@ -536,7 +546,7 @@ export class SalesService {
     if (dto.items && dto.items.length > 0) {
       const itemIds = dto.items.map((i) => i.itemId);
       const dbItems = await this.prisma.item.findMany({
-        where: { id: { in: itemIds }, businessId },
+        where: { id: { in: itemIds }, businessId, branchId },
       });
 
       if (dbItems.length !== itemIds.length) {
@@ -708,15 +718,20 @@ export class SalesService {
       });
     });
 
-    this.logger.info({ saleId: id, businessId }, 'Sale edited');
+    this.logger.info({ saleId: id, businessId, branchId }, 'Sale edited');
     return { success: true, data: transformListSale(sale) };
   }
 
   // ─── DELETE (soft) ─────────────────────────────────────────────────────────
   // Marks sale as cancelled, restores stock, reverses party ledger.
-  async remove(businessId: string, id: string, userId: string | null) {
+  async remove(
+    businessId: string,
+    branchId: string,
+    id: string,
+    userId: string | null,
+  ) {
     const existing = await this.prisma.sale.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
       include: { items: true },
     });
 
@@ -800,7 +815,7 @@ export class SalesService {
   // ─── SUMMARY / DASHBOARD STATS ────────────────────────────────────────────
   // GET /sales/summary
   // Returns today, this month, last month, all-time stats plus change % for UI.
-  async getSummary(businessId: string) {
+  async getSummary(businessId: string, branchId: string) {
     const now = new Date();
 
     // ── Time range boundaries ──────────────────────────────────────────────
@@ -823,6 +838,7 @@ export class SalesService {
     // ── Shared where clause builder ────────────────────────────────────────
     const makeWhere = (from: Date, to: Date): Prisma.SaleWhereInput => ({
       businessId,
+      branchId,
       status: { notIn: ['cancelled', 'returned'] },
       createdAt: { gte: from, lt: to },
     });
@@ -860,7 +876,11 @@ export class SalesService {
         _avg: { total: true },
       }),
       this.prisma.sale.aggregate({
-        where: { businessId, status: { notIn: ['cancelled', 'returned'] } },
+        where: {
+          businessId,
+          branchId,
+          status: { notIn: ['cancelled', 'returned'] },
+        },
         _sum: { total: true, profit: true },
         _avg: { total: true },
       }),
@@ -868,7 +888,11 @@ export class SalesService {
       this.prisma.sale.count({ where: makeWhere(todayStart, todayEnd) }),
       this.prisma.sale.count({ where: makeWhere(monthStart, monthEnd) }),
       this.prisma.sale.count({
-        where: { businessId, status: { notIn: ['cancelled', 'returned'] } },
+        where: {
+          businessId,
+          branchId,
+          status: { notIn: ['cancelled', 'returned'] },
+        },
       }),
     ]);
 

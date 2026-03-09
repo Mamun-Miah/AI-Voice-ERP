@@ -101,9 +101,9 @@ export class ItemsService {
 
   // ─── GET ONE ───────────────────────────────────────────────────────────────
   // Matches Next.js GET /api/items/[id] — includes last 10 stock history entries
-  async findOne(businessId: string, id: string) {
+  async findOne(businessId: string, branchId: string, id: string) {
     const item = await this.prisma.item.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
       include: {
         category: { select: { id: true, name: true, nameBn: true } },
       },
@@ -130,10 +130,15 @@ export class ItemsService {
   }
 
   // ─── CREATE ────────────────────────────────────────────────────────────────
-  async create(businessId: string, userId: string | null, dto: CreateItemDto) {
+  async create(
+    businessId: string,
+    branchId: string,
+    userId: string | null,
+    dto: CreateItemDto,
+  ) {
     if (dto.sku) {
       const existing = await this.prisma.item.findFirst({
-        where: { businessId, sku: dto.sku },
+        where: { businessId, branchId, sku: dto.sku },
       });
       if (existing) {
         throw new ConflictException(
@@ -145,6 +150,7 @@ export class ItemsService {
     const item = await this.prisma.item.create({
       data: {
         businessId,
+        branchId,
         name: dto.name,
         nameBn: dto.nameBn,
         sku: dto.sku,
@@ -173,6 +179,7 @@ export class ItemsService {
       await this.prisma.stockLedger.create({
         data: {
           businessId,
+          branchId,
           itemId: item.id,
           type: 'purchase',
           quantity: dto.currentStock!,
@@ -197,12 +204,12 @@ export class ItemsService {
   // Matches Next.js PATCH /api/items/[id] — also handles stockAdjustment
   async update(
     businessId: string,
+    branchId: string,
     id: string,
-    userId: string | null,
     dto: UpdateItemDto,
   ) {
     const existing = await this.prisma.item.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
     if (!existing) {
       throw new NotFoundException(`Item ${id} not found.`);
@@ -211,7 +218,7 @@ export class ItemsService {
     // Guard: duplicate SKU if changing
     if (dto.sku && dto.sku !== existing.sku) {
       const skuTaken = await this.prisma.item.findFirst({
-        where: { businessId, sku: dto.sku, id: { not: id } },
+        where: { businessId, branchId, sku: dto.sku, id: { not: id } },
       });
       if (skuTaken) {
         throw new ConflictException(
@@ -263,12 +270,13 @@ export class ItemsService {
   // Matches Next.js PATCH stockAdjustment logic — separated into its own endpoint
   async adjustStock(
     businessId: string,
+    branchId: string,
     id: string,
     userId: string | null,
     dto: StockAdjustmentDto,
   ) {
     const item = await this.prisma.item.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
     if (!item) {
       throw new NotFoundException(`Item ${id} not found.`);
@@ -318,35 +326,35 @@ export class ItemsService {
   }
 
   // ─── SOFT DELETE ───────────────────────────────────────────────────────────
-  async remove(businessId: string, id: string) {
+  async remove(businessId: string, branchId: string, id: string) {
     const existing = await this.prisma.item.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
     if (!existing) {
       throw new NotFoundException(`Item ${id} not found.`);
     }
 
     await this.prisma.item.update({
-      where: { id },
+      where: { id, businessId, branchId },
       data: { isActive: false },
     });
 
-    this.logger.info({ itemId: id, businessId }, 'Item soft-deleted');
+    this.logger.info({ itemId: id, businessId, branchId }, 'Item soft-deleted');
 
     return { success: true, data: { id } };
   }
 
   // ─── STOCK LEDGER (full history) ───────────────────────────────────────────
-  async getStockLedger(businessId: string, itemId: string) {
+  async getStockLedger(businessId: string, branchId: string, itemId: string) {
     const item = await this.prisma.item.findFirst({
-      where: { id: itemId, businessId },
+      where: { id: itemId, businessId, branchId },
     });
     if (!item) {
       throw new NotFoundException(`Item ${itemId} not found.`);
     }
 
     const ledger = await this.prisma.stockLedger.findMany({
-      where: { itemId, businessId },
+      where: { itemId, businessId, branchId },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

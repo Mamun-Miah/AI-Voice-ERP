@@ -45,7 +45,7 @@ export class ItemsController {
   @ApiResponse({ status: 200, description: 'Item retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Item not found' })
   findOne(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.itemsService.findOne(user.businessId, id);
+    return this.itemsService.findOne(user.businessId, user.branchId, id);
   }
 
   // POST /items
@@ -55,7 +55,12 @@ export class ItemsController {
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 409, description: 'Duplicate SKU' })
   create(@GetUser() user: JwtUser, @Body() dto: CreateItemDto) {
-    return this.itemsService.create(user.businessId, user.id, dto);
+    return this.itemsService.create(
+      user.businessId,
+      user.branchId,
+      user.id,
+      dto,
+    );
   }
 
   // PATCH /items/:id  — update item fields only (no stock here)
@@ -69,7 +74,7 @@ export class ItemsController {
     @Param('id') id: string,
     @Body() dto: UpdateItemDto,
   ) {
-    return this.itemsService.update(user.businessId, id, user.id, dto);
+    return this.itemsService.update(user.businessId, user.branchId, id, dto);
   }
 
   // PATCH /items/:id/stock-adjust
@@ -86,7 +91,13 @@ export class ItemsController {
     @Param('id') id: string,
     @Body() dto: StockAdjustmentDto,
   ) {
-    return this.itemsService.adjustStock(user.businessId, id, user.id, dto);
+    return this.itemsService.adjustStock(
+      user.businessId,
+      user.branchId,
+      id,
+      user.id,
+      dto,
+    );
   }
 
   // DELETE /items/:id  — soft delete
@@ -95,7 +106,7 @@ export class ItemsController {
   @ApiResponse({ status: 200, description: 'Item deleted successfully' })
   @ApiResponse({ status: 404, description: 'Item not found' })
   remove(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.itemsService.remove(user.businessId, id);
+    return this.itemsService.remove(user.businessId, user.branchId, id);
   }
 
   // GET /items/:id/stock-ledger  — full history (last 100)
@@ -104,6 +115,6 @@ export class ItemsController {
   @ApiResponse({ status: 200, description: 'Stock ledger retrieved' })
   @ApiResponse({ status: 404, description: 'Item not found' })
   getStockLedger(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.itemsService.getStockLedger(user.businessId, id);
+    return this.itemsService.getStockLedger(user.businessId, user.branchId, id);
   }
 }

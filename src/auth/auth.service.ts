@@ -92,7 +92,14 @@ export class AuthService {
           businessTypeId: businessType.id,
         },
       });
-
+      //create branch id
+      const branch = await tx.branch.create({
+        data: {
+          name: 'Main Branch',
+          businessId: business.id,
+          isMain: true,
+        },
+      });
       const user = await tx.user.create({
         data: {
           name: dto.name,
@@ -104,7 +111,7 @@ export class AuthService {
         },
       });
 
-      return { business, user };
+      return { business, user, branch };
     });
 
     // 4. Generate + hash OTP
@@ -209,6 +216,7 @@ export class AuthService {
       accessToken,
       user: {
         id: user.id,
+        branchId: user.branchId,
         name: user.name,
         phone: user.phone,
         role: user.role,
@@ -249,6 +257,7 @@ export class AuthService {
       accessToken,
       user: {
         id: user.id,
+        branchId: user.branchId,
         name: user.name,
         phone: user.phone,
         role: user.role,

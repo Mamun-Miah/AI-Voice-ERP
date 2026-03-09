@@ -110,6 +110,7 @@ export class AuthController {
       success: true,
       user: {
         id: user.id,
+        branchId: user.branchId,
         phone: user.phone,
         role: user.role,
         businessId: user.businessId,

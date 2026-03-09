@@ -103,6 +103,7 @@ export class AuthService {
       const user = await tx.user.create({
         data: {
           name: dto.name,
+          branchId: branch.id,
           phone: dto.phone,
           businessId: business.id,
           provider: 'PHONE',
@@ -314,8 +315,15 @@ export class AuthService {
     const hashedOtp = await bcrypt.hash(rawOtp, roundsOfHashing);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    await this.prisma.otp.create({
-      data: {
+    await this.prisma.otp.upsert({
+      where: { phone: user.phone },
+      update: {
+        code: hashedOtp,
+        verified: false,
+        expiresAt,
+        createdAt: new Date(),
+      },
+      create: {
         phone: user.phone,
         businessId: user.businessId,
         code: hashedOtp,

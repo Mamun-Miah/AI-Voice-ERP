@@ -133,11 +133,7 @@ export class ExpensesController {
   @ApiResponse({ status: 200, description: 'Category retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   findOneCategory(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.expensesService.findOneCategory(
-      user.businessId,
-      user.branchId,
-      id,
-    );
+    return this.expensesService.findOneCategory(user.businessId, id);
   }
 
   // POST /expenses/categories
@@ -149,11 +145,7 @@ export class ExpensesController {
     @GetUser() user: JwtUser,
     @Body() dto: CreateExpenseCategoryDto,
   ) {
-    return this.expensesService.createCategory(
-      user.businessId,
-      user.branchId,
-      dto,
-    );
+    return this.expensesService.createCategory(user.businessId, dto);
   }
 
   // PATCH /expenses/categories/:id
@@ -167,12 +159,7 @@ export class ExpensesController {
     @Param('id') id: string,
     @Body() dto: UpdateExpenseCategoryDto,
   ) {
-    return this.expensesService.updateCategory(
-      user.businessId,
-      user.branchId,
-      id,
-      dto,
-    );
+    return this.expensesService.updateCategory(user.businessId, id, dto);
   }
 
   // DELETE /expenses/categories/:id
@@ -188,10 +175,6 @@ export class ExpensesController {
   })
   @ApiResponse({ status: 404, description: 'Category not found' })
   removeCategory(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.expensesService.removeCategory(
-      user.businessId,
-      user.branchId,
-      id,
-    );
+    return this.expensesService.removeCategory(user.businessId, id);
   }
 }

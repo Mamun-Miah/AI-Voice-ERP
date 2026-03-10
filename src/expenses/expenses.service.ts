@@ -179,7 +179,7 @@ export class ExpensesService {
           businessId,
           categoryId: dto.categoryId,
           accountId: dto.accountId,
-          branchId: dto.branchId,
+          branchId,
           amount: dto.amount,
           description: dto.description,
           date: dto.date ? new Date(dto.date) : new Date(),
@@ -200,7 +200,10 @@ export class ExpensesService {
       return newExpense;
     });
 
-    this.logger.info({ expenseId: expense.id, businessId }, 'Expense created');
+    this.logger.info(
+      { expenseId: expense.id, businessId, branchId },
+      'Expense created',
+    );
     return { success: true, data: expense };
   }
 
@@ -290,7 +293,10 @@ export class ExpensesService {
       });
     });
 
-    this.logger.info({ expenseId: id, businessId }, 'Expense updated');
+    this.logger.info(
+      { expenseId: id, businessId, branchId },
+      'Expense updated',
+    );
     return { success: true, data: expense };
   }
 
@@ -381,7 +387,7 @@ export class ExpensesService {
       }),
       this.prisma.expense.count({ where: makeWhere(todayStart, todayEnd) }),
       this.prisma.expense.count({ where: makeWhere(monthStart, monthEnd) }),
-      this.prisma.expense.count({ where: { businessId } }),
+      this.prisma.expense.count({ where: { businessId, branchId } }),
       // Top 5 categories by total spend this month
       this.prisma.expense.groupBy({
         by: ['categoryId'],
@@ -475,7 +481,7 @@ export class ExpensesService {
   }
 
   // ─── GET ONE CATEGORY ──────────────────────────────────────────────────────
-  async findOneCategory(businessId: string, branchId: string, id: string) {
+  async findOneCategory(businessId: string, id: string) {
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id, OR: [{ businessId }, { businessId: null }] },
     });
@@ -487,11 +493,7 @@ export class ExpensesService {
   }
 
   // ─── CREATE CATEGORY ───────────────────────────────────────────────────────
-  async createCategory(
-    businessId: string,
-    branchId: string,
-    dto: CreateExpenseCategoryDto,
-  ) {
+  async createCategory(businessId: string, dto: CreateExpenseCategoryDto) {
     // @@unique([businessId, name]) handles duplicates — but give a clear error
     const existing = await this.prisma.expenseCategory.findFirst({
       where: { businessId, name: dto.name },
@@ -521,7 +523,6 @@ export class ExpensesService {
   // ─── UPDATE CATEGORY ───────────────────────────────────────────────────────
   async updateCategory(
     businessId: string,
-    branchId: string,
     id: string,
     dto: UpdateExpenseCategoryDto,
   ) {
@@ -556,7 +557,7 @@ export class ExpensesService {
   }
 
   // ─── DELETE CATEGORY ───────────────────────────────────────────────────────
-  async removeCategory(businessId: string, branchId: string, id: string) {
+  async removeCategory(businessId: string, id: string) {
     const existing = await this.prisma.expenseCategory.findFirst({
       where: { id, businessId },
     });

@@ -22,6 +22,8 @@ import { EditQuotationDto } from './dto/edit-quotation.dto';
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
 import { QueryQuotationDto } from './dto/query-quotation.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { StoredQuotationItem } from './quotation.types';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
 

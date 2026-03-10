@@ -14,18 +14,7 @@ import {
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
 import { EditQuotationDto } from './dto/edit-quotation.dto';
 import { QueryQuotationDto } from './dto/query-quotation.dto';
-
-// ─── Stored item shape (JSON column) ─────────────────────────────────────────
-
-interface StoredQuotationItem {
-  id: string;
-  itemId: string;
-  itemName: string;
-  quantity: number;
-  unitPrice: number;
-  discount: number;
-  total: number;
-}
+import { StoredQuotationItem } from './quotation.types';
 
 // ─── Quotation number generator ───────────────────────────────────────────────
 // Format: QT-YYYYMMDD-0001  (daily sequence, same strategy as invoices)
@@ -194,7 +183,6 @@ export class QuotationsService {
             : new Date(),
           status: dto.status ?? QuotationStatus.DRAFT,
           notes: dto.notes ?? null,
-          createdBy: userId,
         },
       });
     });
@@ -522,7 +510,8 @@ export class QuotationsService {
 
     if (!existing) throw new NotFoundException(`Quotation ${id} not found.`);
 
-    if (existing.status !== QuotationStatus.DRAFT) {
+    const existingStatus = existing.status as QuotationStatus;
+    if (existingStatus !== QuotationStatus.DRAFT) {
       throw new ForbiddenException(
         `Only draft quotations can be deleted. This quotation is "${existing.status}".`,
       );

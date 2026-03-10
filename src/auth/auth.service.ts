@@ -258,13 +258,20 @@ export class AuthService {
         where: { phone: user.phone, verified: false },
         data: { verified: true }, // expire old ones
       }),
-      this.prisma.otp.create({
-        data: {
-          phone: user.phone,
+      this.prisma.otp.upsert({
+        where: { phone: user.phone },
+        update: {
           code: hashedCode,
           expiresAt,
           verified: false,
-          attempts: 0,
+          createdAt: new Date(),
+        },
+        create: {
+          phone: user.phone,
+          businessId: user.businessId,
+          code: hashedCode,
+          purpose: 'signin',
+          expiresAt,
         },
       }),
     ]);

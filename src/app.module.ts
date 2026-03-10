@@ -1,3 +1,5 @@
+import { QuotationsModule } from './quotations/quotations.module';
+import { QuotationsService } from './quotations/quotations.service';
 import { SalesModule } from './sales/sales.module';
 import { SalesController } from './sales/sales.controller';
 import { SalesService } from './sales/sales.service';
@@ -20,6 +22,7 @@ import { ExpensesController } from './expenses/expenses.controller';
 import { ExpensesService } from './expenses/expenses.service';
 @Module({
   imports: [
+    QuotationsModule,
     ExpensesModule,
     SalesModule,
     ItemsModule,
@@ -72,6 +75,7 @@ import { ExpensesService } from './expenses/expenses.service';
     AppController,
   ],
   providers: [
+    QuotationsService,
     ExpensesService,
     SalesService,
     ItemsService,

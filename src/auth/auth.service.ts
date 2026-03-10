@@ -245,9 +245,9 @@ export class AuthService {
       );
     }
 
-    const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
-      expiresIn: '7d',
-    });
+    // const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
+    //   expiresIn: '7d',
+    // });
 
     const business = await this.fetchBusinessInfo(user.businessId);
 
@@ -255,7 +255,7 @@ export class AuthService {
 
     return {
       success: true,
-      accessToken,
+      // accessToken,
       user: {
         id: user.id,
         branchId: user.branchId,

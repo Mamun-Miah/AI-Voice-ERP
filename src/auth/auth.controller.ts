@@ -84,16 +84,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with phone number' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async signin(
-    @Body() dto: LoginUserDto,
-    @Res({ passthrough: true }) response: express.Response,
-  ) {
+  async signin(@Body() dto: LoginUserDto) {
     const result = await this.authService.signin(dto.phone);
 
-    response.cookie('Authentication', result.accessToken, {
-      ...AUTH_COOKIE_OPTIONS,
-      maxAge: COOKIE_MAX_AGE,
-    });
+    // response.cookie('Authentication', result.accessToken, {
+    //   ...AUTH_COOKIE_OPTIONS,
+    //   maxAge: COOKIE_MAX_AGE,
+    // });
 
     return result;
   }

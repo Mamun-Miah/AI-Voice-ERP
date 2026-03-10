@@ -30,6 +30,7 @@ type ExpenseWithCategory = Prisma.ExpenseGetPayload<{
 async function deductFromAccount(
   tx: Prisma.TransactionClient,
   businessId: string,
+  branchId: string,
   accountId: string | undefined | null,
   amount: number,
 ): Promise<void> {
@@ -43,7 +44,7 @@ async function deductFromAccount(
     }
   } else {
     const cashAccount = await tx.account.findFirst({
-      where: { businessId, type: 'cash' },
+      where: { businessId, branchId, type: 'cash' },
     });
     if (cashAccount) {
       await tx.account.update({
@@ -59,6 +60,7 @@ async function deductFromAccount(
 async function refundToAccount(
   tx: Prisma.TransactionClient,
   businessId: string,
+  branchId: string,
   accountId: string | undefined | null,
   amount: number,
 ): Promise<void> {
@@ -72,7 +74,7 @@ async function refundToAccount(
     }
   } else {
     const cashAccount = await tx.account.findFirst({
-      where: { businessId, type: 'cash' },
+      where: { businessId, branchId, type: 'cash' },
     });
     if (cashAccount) {
       await tx.account.update({
@@ -96,11 +98,11 @@ export class ExpensesService {
   // ══════════════════════════════════════════════════════════════════════════
 
   // ─── LIST ──────────────────────────────────────────────────────────────────
-  async findAll(businessId: string, query: QueryExpenseDto) {
+  async findAll(businessId: string, branchId: string, query: QueryExpenseDto) {
     const page = parseInt(query.page ?? '1', 10);
     const limit = parseInt(query.limit ?? '50', 10);
 
-    const where: Prisma.ExpenseWhereInput = { businessId };
+    const where: Prisma.ExpenseWhereInput = { businessId, branchId };
 
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.branchId) where.branchId = query.branchId;
@@ -139,10 +141,11 @@ export class ExpensesService {
   // ─── GET ONE ───────────────────────────────────────────────────────────────
   async findOne(
     businessId: string,
+    branchId: string,
     id: string,
   ): Promise<{ success: boolean; data: ExpenseWithCategory }> {
     const expense = await this.prisma.expense.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
       include: expenseInclude,
     });
 
@@ -154,6 +157,7 @@ export class ExpensesService {
   // ─── CREATE ────────────────────────────────────────────────────────────────
   async create(
     businessId: string,
+    branchId: string,
     userId: string | null,
     dto: CreateExpenseDto,
   ) {
@@ -185,7 +189,13 @@ export class ExpensesService {
         include: expenseInclude,
       });
 
-      await deductFromAccount(tx, businessId, dto.accountId, dto.amount);
+      await deductFromAccount(
+        tx,
+        businessId,
+        branchId,
+        dto.accountId,
+        dto.amount,
+      );
 
       return newExpense;
     });
@@ -196,9 +206,14 @@ export class ExpensesService {
 
   // ─── UPDATE ────────────────────────────────────────────────────────────────
   // When amount changes: refund old amount → deduct new amount from account.
-  async update(businessId: string, id: string, dto: UpdateExpenseDto) {
+  async update(
+    businessId: string,
+    branchId: string,
+    id: string,
+    dto: UpdateExpenseDto,
+  ) {
     const existing = await this.prisma.expense.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!existing) throw new NotFoundException(`Expense ${id} not found.`);
@@ -222,6 +237,7 @@ export class ExpensesService {
         await refundToAccount(
           tx,
           businessId,
+          branchId,
           existing.accountId,
           existing.amount,
         );
@@ -229,6 +245,7 @@ export class ExpensesService {
         await deductFromAccount(
           tx,
           businessId,
+          branchId,
           dto.accountId ?? existing.accountId,
           dto.amount,
         );
@@ -243,10 +260,17 @@ export class ExpensesService {
         await refundToAccount(
           tx,
           businessId,
+          branchId,
           existing.accountId,
           existing.amount,
         );
-        await deductFromAccount(tx, businessId, dto.accountId, existing.amount);
+        await deductFromAccount(
+          tx,
+          businessId,
+          branchId,
+          dto.accountId,
+          existing.amount,
+        );
       }
 
       return tx.expense.update({
@@ -272,9 +296,9 @@ export class ExpensesService {
 
   // ─── DELETE ────────────────────────────────────────────────────────────────
   // Hard delete — refunds the amount back to the account.
-  async remove(businessId: string, id: string) {
+  async remove(businessId: string, branchId: string, id: string) {
     const existing = await this.prisma.expense.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!existing) throw new NotFoundException(`Expense ${id} not found.`);
@@ -284,6 +308,7 @@ export class ExpensesService {
       await refundToAccount(
         tx,
         businessId,
+        branchId,
         existing.accountId,
         existing.amount,
       );
@@ -291,12 +316,15 @@ export class ExpensesService {
       await tx.expense.delete({ where: { id } });
     });
 
-    this.logger.info({ expenseId: id, businessId }, 'Expense deleted');
+    this.logger.info(
+      { expenseId: id, businessId, branchId },
+      'Expense deleted',
+    );
     return { success: true, data: { id } };
   }
 
   // ─── SUMMARY ───────────────────────────────────────────────────────────────
-  async getSummary(businessId: string) {
+  async getSummary(businessId: string, branchId: string) {
     const now = new Date();
 
     const todayStart = new Date(
@@ -347,7 +375,7 @@ export class ExpensesService {
         _avg: { amount: true },
       }),
       this.prisma.expense.aggregate({
-        where: { businessId },
+        where: { businessId, branchId },
         _sum: { amount: true },
         _avg: { amount: true },
       }),
@@ -427,7 +455,7 @@ export class ExpensesService {
 
   // ─── LIST CATEGORIES ───────────────────────────────────────────────────────
   // Returns business-specific categories + global templates (businessId = null)
-  async findAllCategories(businessId: string) {
+  async findAllCategories(businessId: string, branchId: string) {
     const categories = await this.prisma.expenseCategory.findMany({
       where: { OR: [{ businessId }, { businessId: null }] },
       orderBy: { name: 'asc' },
@@ -437,7 +465,7 @@ export class ExpensesService {
     const withCount = await Promise.all(
       categories.map(async (cat) => {
         const expenseCount = await this.prisma.expense.count({
-          where: { categoryId: cat.id, businessId },
+          where: { categoryId: cat.id, businessId, branchId },
         });
         return { ...cat, expenseCount };
       }),
@@ -447,7 +475,7 @@ export class ExpensesService {
   }
 
   // ─── GET ONE CATEGORY ──────────────────────────────────────────────────────
-  async findOneCategory(businessId: string, id: string) {
+  async findOneCategory(businessId: string, branchId: string, id: string) {
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id, OR: [{ businessId }, { businessId: null }] },
     });
@@ -459,7 +487,11 @@ export class ExpensesService {
   }
 
   // ─── CREATE CATEGORY ───────────────────────────────────────────────────────
-  async createCategory(businessId: string, dto: CreateExpenseCategoryDto) {
+  async createCategory(
+    businessId: string,
+    branchId: string,
+    dto: CreateExpenseCategoryDto,
+  ) {
     // @@unique([businessId, name]) handles duplicates — but give a clear error
     const existing = await this.prisma.expenseCategory.findFirst({
       where: { businessId, name: dto.name },
@@ -489,6 +521,7 @@ export class ExpensesService {
   // ─── UPDATE CATEGORY ───────────────────────────────────────────────────────
   async updateCategory(
     businessId: string,
+    branchId: string,
     id: string,
     dto: UpdateExpenseCategoryDto,
   ) {
@@ -523,7 +556,7 @@ export class ExpensesService {
   }
 
   // ─── DELETE CATEGORY ───────────────────────────────────────────────────────
-  async removeCategory(businessId: string, id: string) {
+  async removeCategory(businessId: string, branchId: string, id: string) {
     const existing = await this.prisma.expenseCategory.findFirst({
       where: { id, businessId },
     });

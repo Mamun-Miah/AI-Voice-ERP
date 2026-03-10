@@ -1,7 +1,7 @@
 import { Controller, Body, Post, UseGuards, Res, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterUserDto } from './dto/register-user.dto';
-import { LoginUserDto } from './dto/login-user.dto';
+import { SigninDto, VerifySigninOtpDto } from './dto/signin.dto';
 import { VerifyOtpDto, ResendOtpDto } from './dto/otp.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import express, { CookieOptions } from 'express';
@@ -80,19 +80,36 @@ export class AuthController {
   // Body: { phone }
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 per minute
-  @Post('login')
-  @ApiOperation({ summary: 'Login with phone number' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async signin(@Body() dto: LoginUserDto) {
-    const result = await this.authService.signin(dto.phone);
+  @Post('signin')
+  @ApiOperation({
+    summary: 'Sign in — step 1',
+    description:
+      'Sends an OTP to the registered phone number. Returns userId to use in step 2.',
+  })
+  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({
+    status: 401,
+    description: 'Account deactivated or phone not verified',
+  })
+  signin(@Body() dto: SigninDto) {
+    return this.authService.signin(dto.phone);
+  }
 
-    // response.cookie('Authentication', result.accessToken, {
-    //   ...AUTH_COOKIE_OPTIONS,
-    //   maxAge: COOKIE_MAX_AGE,
-    // });
-
-    return result;
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('signin/verify')
+  @ApiOperation({
+    summary: 'Sign in — step 2',
+    description: 'Verifies the OTP and returns a JWT access token.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Signed in successfully, token returned',
+  })
+  @ApiResponse({ status: 401, description: 'Incorrect or expired OTP' })
+  verifySigninOtp(@Body() dto: VerifySigninOtpDto) {
+    return this.authService.verifySigninOtp(dto.userId, dto.code);
   }
 
   // GET /auth/status

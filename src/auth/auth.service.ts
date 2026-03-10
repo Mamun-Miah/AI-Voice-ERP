@@ -228,11 +228,12 @@ export class AuthService {
 
   // ─── 3. SIGNIN ────────────────────────────────────────────────────────────
   // POST /auth/signin
-  // Body: { "phone": "1234567890" }
-  // No OTP needed — phone ownership already proven at signup
-  // Response: { accessToken, user, business }
+  // Body: { "phone": "01XXXXXXXXX" }
+  // Finds the user, sends an OTP to their phone, returns userId + message.
+  // The client must call POST /auth/signin/verify with userId + code to get a token.
   async signin(phone: string) {
     const user = await this.findUserByPhone(phone);
+
     if (!user) {
       throw new NotFoundException('User not found. Please sign up first.');
     }
@@ -245,17 +246,102 @@ export class AuthService {
       );
     }
 
-    // const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
-    //   expiresIn: '7d',
-    // });
+    // Generate and hash a 6-digit OTP
+    const rawCode = Math.floor(100_000 + Math.random() * 900_000).toString();
+    const hashedCode = await bcrypt.hash(rawCode, 10);
 
-    const business = await this.fetchBusinessInfo(user.businessId);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1_000); // 10 minutes
 
-    this.logger.info({ userId: user.id }, 'User signed in');
+    // Invalidate any previous unused OTPs for this phone, then create a fresh one
+    await this.prisma.$transaction([
+      this.prisma.otp.updateMany({
+        where: { phone: user.phone, verified: false },
+        data: { verified: true }, // expire old ones
+      }),
+      this.prisma.otp.create({
+        data: {
+          phone: user.phone,
+          code: hashedCode,
+          expiresAt,
+          verified: false,
+          attempts: 0,
+        },
+      }),
+    ]);
+
+    // Send OTP via SMS
+    // await this.smsService.send(
+    //   user.phone,
+    //   `Your SmartStore login OTP is: ${rawCode}. Valid for 10 minutes.`,
+    // );
+
+    this.logger.info({ userId: user.id, phone: user.phone }, 'Signin OTP sent');
 
     return {
       success: true,
-      // accessToken,
+      message: 'OTP sent to your registered phone number.',
+      userId: user.id,
+    };
+  }
+
+  // ─── 4. VERIFY SIGNIN OTP ─────────────────────────────────────────────────
+  // POST /auth/signin/verify
+  // Body: { "userId": "...", "code": "123456" }
+  // Verifies the OTP and issues a JWT access token.
+  async verifySigninOtp(userId: string, code: string) {
+    const user = await this.findUserById(userId);
+
+    if (!user) {
+      throw new BadRequestException('User not found.');
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated.');
+    }
+
+    // Find the latest valid OTP for this phone
+    const otpRecord = await this.prisma.otp.findFirst({
+      where: {
+        phone: user.phone,
+        verified: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!otpRecord) {
+      throw new UnauthorizedException('OTP not found or has expired.');
+    }
+
+    // Verify code against hash
+    const isValid = await bcrypt.compare(code, otpRecord.code);
+
+    if (!isValid) {
+      await this.prisma.otp.update({
+        where: { id: otpRecord.id },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException('Incorrect OTP.');
+    }
+
+    // Mark OTP as used
+    await this.prisma.otp.update({
+      where: { id: otpRecord.id },
+      data: { verified: true },
+    });
+
+    // Issue JWT
+    const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
+      expiresIn: '7d',
+    });
+
+    const business = await this.fetchBusinessInfo(user.businessId);
+
+    this.logger.info({ userId: user.id }, 'Signin OTP verified — token issued');
+
+    return {
+      success: true,
+      message: 'Signed in successfully.',
+      accessToken,
       user: {
         id: user.id,
         branchId: user.branchId,

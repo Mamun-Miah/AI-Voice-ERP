@@ -68,12 +68,21 @@ export class AuthController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 30, ttl: 600000 } }) // 3 per 10 minutes
   @Post('resend-otp')
-  @ApiOperation({ summary: 'Resend OTP (max 3 times per 10 minutes)' })
+  @ApiOperation({
+    summary: 'Resend OTP',
+    description:
+      'Works for both signup and signin. ' +
+      'Pass purpose="signup" when awaiting initial verification, ' +
+      'purpose="signin" when logging in. ' +
+      'Throttled: 60 seconds between requests.',
+  })
   @ApiResponse({ status: 200, description: 'OTP resent successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  async resendOtp(@Body() dto: ResendOtpDto) {
-    return this.authService.resendOtp(dto.uuid);
+  @ApiResponse({
+    status: 400,
+    description: 'Throttled, wrong purpose, or user not found',
+  })
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.authService.resendOtp(dto.userId, dto.purpose);
   }
 
   // POST /auth/login

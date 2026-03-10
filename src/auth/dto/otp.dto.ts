@@ -1,14 +1,20 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+export enum OtpPurpose {
+  SIGNUP = 'signup',
+  SIGNIN = 'signin',
+}
+
 export class ResendOtpDto {
-  @ApiProperty({
-    example: 'cmmbtdajk0001mwfbrdl1uapv',
-    description: 'User UUID',
-  })
+  @ApiProperty({ example: 'clx1234userid' })
   @IsString()
   @IsNotEmpty()
-  uuid: string;
+  userId: string;
+
+  @ApiProperty({ enum: OtpPurpose, example: OtpPurpose.SIGNIN })
+  @IsEnum(OtpPurpose)
+  purpose: OtpPurpose;
 }
 
 export class VerifyOtpDto {

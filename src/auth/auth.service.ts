@@ -141,7 +141,7 @@ export class AuthService {
       'Signup successful — OTP generated',
     );
 
-    // ⚠️ In production: send rawOtp via SMS, remove from response
+    // In production: send rawOtp via SMS, remove from response
     return {
       success: true,
       message:
@@ -363,18 +363,31 @@ export class AuthService {
 
   // ─── RESEND OTP ────────────────────────────────────────────────────────────
   // POST /auth/resend-otp
-  // Body: { uuid: userId }
-  // Throttled: max 3 resends per 10 minutes
-  async resendOtp(userId: string) {
+  // Body: { userId, purpose: 'signup' | 'signin' }
+  // Works for both flows:
+  //   - signup:  user must NOT be verified yet
+  //   - signin:  user MUST already be verified
+  // Throttled: must wait 60 seconds between resend requests
+  async resendOtp(userId: string, purpose: 'signup' | 'signin') {
     const user = await this.findUserById(userId);
     if (!user) {
       throw new BadRequestException('User not found.');
     }
-    if (user.isPhoneVerified) {
-      throw new BadRequestException('Phone already verified. Please sign in.');
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated.');
     }
 
-    // Check if a valid OTP already exists and was created less than 1 minute ago
+    // ── Context-specific guards ───────────────────────────────────────────────
+    if (purpose === 'signup' && user.isPhoneVerified) {
+      throw new BadRequestException('Phone already verified. Please sign in.');
+    }
+    if (purpose === 'signin' && !user.isPhoneVerified) {
+      throw new BadRequestException(
+        'Phone not verified. Please complete signup first.',
+      );
+    }
+
+    // ── 60-second throttle ────────────────────────────────────────────────────
     const recentOtp = await this.prisma.otp.findFirst({
       where: {
         phone: user.phone,
@@ -385,29 +398,26 @@ export class AuthService {
     });
 
     if (recentOtp) {
-      const createdAt = recentOtp.createdAt.getTime();
-      const now = Date.now();
-      const secondsSinceCreated = (now - createdAt) / 1000;
-
-      // Must wait 60 seconds before requesting a new OTP
+      const secondsSinceCreated =
+        (Date.now() - recentOtp.createdAt.getTime()) / 1000;
       if (secondsSinceCreated < 60) {
         const waitSeconds = Math.ceil(60 - secondsSinceCreated);
         throw new BadRequestException(
-          `Please wait ${waitSeconds} seconds before requesting a new OTP.`,
+          `Please wait ${waitSeconds} second(s) before requesting a new OTP.`,
         );
       }
     }
 
-    // Invalidate old OTPs
+    // ── Invalidate old OTPs ───────────────────────────────────────────────────
     await this.prisma.otp.updateMany({
       where: { phone: user.phone, verified: false },
       data: { verified: true },
     });
 
-    // Generate + hash new OTP
-    const rawOtp = randomInt(100000, 999999).toString();
+    // ── Generate + hash new OTP ───────────────────────────────────────────────
+    const rawOtp = randomInt(100_000, 999_999).toString();
     const hashedOtp = await bcrypt.hash(rawOtp, roundsOfHashing);
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1_000); // 5 minutes
 
     await this.prisma.otp.upsert({
       where: { phone: user.phone },
@@ -415,26 +425,27 @@ export class AuthService {
         code: hashedOtp,
         verified: false,
         expiresAt,
+        purpose,
         createdAt: new Date(),
       },
       create: {
         phone: user.phone,
         businessId: user.businessId,
         code: hashedOtp,
-        purpose: 'signup',
+        purpose,
         expiresAt,
       },
     });
 
-    this.logger.info({ userId: user.id }, 'OTP resent');
+    this.logger.info({ userId: user.id, purpose }, 'OTP resent');
 
-    // In production: send rawOtp via SMS, remove from response
+    // TODO: replace `otp` in response with actual SMS send in production
     return {
       success: true,
       message: 'OTP resent successfully.',
       data: {
         userId: user.id,
-        otp: rawOtp,
+        otp: rawOtp, // remove in production
       },
     };
   }

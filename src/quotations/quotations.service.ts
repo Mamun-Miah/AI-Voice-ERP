@@ -77,11 +77,15 @@ export class QuotationsService {
   ) {}
 
   // ─── LIST ──────────────────────────────────────────────────────────────────
-  async findAll(businessId: string, query: QueryQuotationDto) {
+  async findAll(
+    businessId: string,
+    branchId: string,
+    query: QueryQuotationDto,
+  ) {
     const page = parseInt(query.page ?? '1', 10);
     const limit = parseInt(query.limit ?? '20', 10);
 
-    const where: Prisma.QuotationWhereInput = { businessId };
+    const where: Prisma.QuotationWhereInput = { businessId, branchId };
 
     if (query.status && query.status !== 'all') where.status = query.status;
     if (query.partyId) where.partyId = query.partyId;
@@ -126,9 +130,9 @@ export class QuotationsService {
   }
 
   // ─── GET ONE ───────────────────────────────────────────────────────────────
-  async findOne(businessId: string, id: string) {
+  async findOne(businessId: string, branchId: string, id: string) {
     const quotation = await this.prisma.quotation.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!quotation) throw new NotFoundException(`Quotation ${id} not found.`);
@@ -139,13 +143,14 @@ export class QuotationsService {
   // ─── CREATE ────────────────────────────────────────────────────────────────
   async create(
     businessId: string,
+    branchId: string,
     userId: string | null,
     dto: CreateQuotationDto,
   ) {
     // Validate all items belong to this business and collect names
     const itemIds = dto.items.map((i) => i.itemId);
     const dbItems = await this.prisma.item.findMany({
-      where: { id: { in: itemIds }, businessId },
+      where: { id: { in: itemIds }, businessId, branchId },
       select: { id: true, name: true },
     });
 
@@ -169,6 +174,7 @@ export class QuotationsService {
       return tx.quotation.create({
         data: {
           businessId,
+          branchId,
           quotationNo,
           partyId: dto.partyId ?? null,
           partyName: dto.partyName ?? null,
@@ -201,9 +207,14 @@ export class QuotationsService {
   // ─── EDIT (full content edit) ──────────────────────────────────────────────
   // PUT /quotations/:id — replaces items, recalculates totals.
   // Only DRAFT and SENT quotations can be edited.
-  async editQuotation(businessId: string, id: string, dto: EditQuotationDto) {
+  async editQuotation(
+    businessId: string,
+    branchId: string,
+    id: string,
+    dto: EditQuotationDto,
+  ) {
     const existing = await this.prisma.quotation.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!existing) throw new NotFoundException(`Quotation ${id} not found.`);
@@ -270,15 +281,23 @@ export class QuotationsService {
       },
     });
 
-    this.logger.info({ quotationId: id, businessId }, 'Quotation edited');
+    this.logger.info(
+      { quotationId: id, businessId, branchId },
+      'Quotation edited',
+    );
     return { success: true, data: parseQuotation(updated) };
   }
 
   // ─── UPDATE STATUS ─────────────────────────────────────────────────────────
   // PATCH /quotations/:id — status transitions and convertedToSaleId
-  async update(businessId: string, id: string, dto: UpdateQuotationDto) {
+  async update(
+    businessId: string,
+    branchId: string,
+    id: string,
+    dto: UpdateQuotationDto,
+  ) {
     const existing = await this.prisma.quotation.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!existing) throw new NotFoundException(`Quotation ${id} not found.`);
@@ -317,9 +336,14 @@ export class QuotationsService {
   // POST /quotations/:id/convert
   // Creates a Sale from the quotation, marks quotation as converted.
   // Does NOT deduct stock — the sale service will handle that.
-  async convertToSale(businessId: string, id: string, userId: string | null) {
+  async convertToSale(
+    businessId: string,
+    branchId: string,
+    id: string,
+    userId: string | null,
+  ) {
     const quotation = await this.prisma.quotation.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!quotation) throw new NotFoundException(`Quotation ${id} not found.`);
@@ -503,9 +527,9 @@ export class QuotationsService {
 
   // ─── DELETE ────────────────────────────────────────────────────────────────
   // Only DRAFT quotations can be hard-deleted.
-  async remove(businessId: string, id: string) {
+  async remove(businessId: string, branchId: string, id: string) {
     const existing = await this.prisma.quotation.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, branchId },
     });
 
     if (!existing) throw new NotFoundException(`Quotation ${id} not found.`);
@@ -519,12 +543,15 @@ export class QuotationsService {
 
     await this.prisma.quotation.delete({ where: { id } });
 
-    this.logger.info({ quotationId: id, businessId }, 'Quotation deleted');
+    this.logger.info(
+      { quotationId: id, businessId, branchId },
+      'Quotation deleted',
+    );
     return { success: true, data: { id } };
   }
 
   // ─── SUMMARY ───────────────────────────────────────────────────────────────
-  async getSummary(businessId: string) {
+  async getSummary(businessId: string, branchId: string) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -539,7 +566,11 @@ export class QuotationsService {
     ] = await Promise.all([
       this.prisma.quotation.count({ where: { businessId } }),
       this.prisma.quotation.count({
-        where: { businessId, createdAt: { gte: monthStart, lt: monthEnd } },
+        where: {
+          businessId,
+          branchId,
+          createdAt: { gte: monthStart, lt: monthEnd },
+        },
       }),
       // Count per status
       this.prisma.quotation.groupBy({

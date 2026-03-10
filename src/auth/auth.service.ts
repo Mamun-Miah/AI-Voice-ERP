@@ -288,6 +288,7 @@ export class AuthService {
       success: true,
       message: 'OTP sent to your registered phone number.',
       userId: user.id,
+      code: rawCode, // In production, do NOT return the OTP in the response!
     };
   }
 

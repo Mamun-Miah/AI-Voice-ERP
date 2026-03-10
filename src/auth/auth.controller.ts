@@ -1,7 +1,7 @@
 import { Controller, Body, Post, UseGuards, Res, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterUserDto } from './dto/register-user.dto';
-import { SigninDto, VerifySigninOtpDto } from './dto/signin.dto';
+import { SigninDto } from './dto/signin.dto';
 import { VerifyOtpDto, ResendOtpDto } from './dto/otp.dto';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import express, { CookieOptions } from 'express';
@@ -42,6 +42,8 @@ export class AuthController {
 
   // POST /auth/verify-otp
   // Body: { uuid: userId, code: otp }
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 600000 } })
   @Post('verify-otp')
   @ApiOperation({ summary: 'Verify OTP after signup' })
   @ApiResponse({ status: 200, description: 'OTP verified successfully' })
@@ -103,22 +105,6 @@ export class AuthController {
   })
   signin(@Body() dto: SigninDto) {
     return this.authService.signin(dto.phone);
-  }
-
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @Post('signin/verify')
-  @ApiOperation({
-    summary: 'Sign in — step 2',
-    description: 'Verifies the OTP and returns a JWT access token.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Signed in successfully, token returned',
-  })
-  @ApiResponse({ status: 401, description: 'Incorrect or expired OTP' })
-  verifySigninOtp(@Body() dto: VerifySigninOtpDto) {
-    return this.authService.verifySigninOtp(dto.userId, dto.code);
   }
 
   // GET /auth/status

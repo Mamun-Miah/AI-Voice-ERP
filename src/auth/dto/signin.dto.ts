@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SigninDto {
-  @ApiProperty({ example: '01712345678' })
+  @ApiProperty({ example: '+8801712345678' })
   @IsString()
   @IsNotEmpty()
   phone: string;

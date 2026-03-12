@@ -28,6 +28,7 @@ model BusinessType {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
   categories Category[]
+  users      User[]
 }
 
 model Business {
@@ -92,10 +93,12 @@ model User {
   isActive        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+  businessTypeId  String
   auditLogs       AuditLog[]
   provider        AuthProvider @default(PHONE)
   expenses        Expense[]
   sales           Sale[]
+  businessType    BusinessType @relation(fields: [businessTypeId], references: [id])
   branch          Branch?      @relation(fields: [branchId], references: [id])
   business        Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
 

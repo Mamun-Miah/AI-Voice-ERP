@@ -361,4 +361,10 @@ export class ItemsService {
 
     return { success: true, data: ledger };
   }
+  getCategories(businessId: string, businessTypeId: string) {
+    return this.prisma.category.findMany({
+      where: { businessId, businessTypeId },
+      orderBy: { name: 'asc' },
+    });
+  }
 }

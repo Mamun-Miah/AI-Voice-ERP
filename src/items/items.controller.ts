@@ -117,4 +117,17 @@ export class ItemsController {
   getStockLedger(@GetUser() user: JwtUser, @Param('id') id: string) {
     return this.itemsService.getStockLedger(user.businessId, user.branchId, id);
   }
+  //Get /items/categories
+  @Get('categories')
+  @ApiOperation({ summary: 'Get list of item categories' })
+  @ApiResponse({
+    status: 200,
+    description: 'Categories retrieved successfully',
+  })
+  getCategories(@GetUser() user: JwtUser) {
+    return this.itemsService.getCategories(
+      user.businessId,
+      user.businessTypeId,
+    );
+  }
 }

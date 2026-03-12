@@ -7,14 +7,16 @@ import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 import type { Request } from 'express';
 
 interface JwtPayload {
-  sub: string; // userId
+  sub: string; // Standard JWT subject (User ID)
+  id: string; // Added for convenience
+  branchId: string;
+  businessTypeId: string;
   phone: string;
   username?: string;
-  role: string;
-  branchId: string;
-  businessId: string;
   isPhoneVerified: boolean;
-  iat?: number;
+  role: string;
+  businessId: string;
+  iat?: number; // Issued at (added automatically by JWT)
   exp?: number;
 }
 
@@ -63,6 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: true,
         businessId: true,
         branchId: true,
+        businessTypeId: true,
         isPhoneVerified: true,
         isActive: true,
       },
@@ -83,6 +86,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: user.id,
       phone: user.phone,
       branchId: user.branchId,
+      businessTypeId: user.businessTypeId,
       name: user.name,
       role: user.role,
       businessId: user.businessId,

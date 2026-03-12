@@ -106,6 +106,7 @@ export class AuthService {
           branchId: branch.id,
           phone: dto.phone,
           businessId: business.id,
+          businessTypeId: businessType.id,
           provider: 'PHONE',
           isPhoneVerified: false,
           role: 'owner',

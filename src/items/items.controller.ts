@@ -38,7 +38,16 @@ export class ItemsController {
   findAll(@GetUser() user: JwtUser, @Query() query: QueryItemDto) {
     return this.itemsService.findAll(user.businessId, user.branchId, query);
   }
-
+  //Get /items/categories
+  @Get('categories')
+  @ApiOperation({ summary: 'Get list of item categories' })
+  @ApiResponse({
+    status: 200,
+    description: 'Categories retrieved successfully',
+  })
+  getCategories(@GetUser() user: JwtUser) {
+    return this.itemsService.getCategories(user.businessTypeId);
+  }
   // GET /items/:id  — includes last 10 stockHistory entries
   @Get(':id')
   @ApiOperation({ summary: 'Get a single item with recent stock history' })
@@ -116,18 +125,5 @@ export class ItemsController {
   @ApiResponse({ status: 404, description: 'Item not found' })
   getStockLedger(@GetUser() user: JwtUser, @Param('id') id: string) {
     return this.itemsService.getStockLedger(user.businessId, user.branchId, id);
-  }
-  //Get /items/categories
-  @Get('categories')
-  @ApiOperation({ summary: 'Get list of item categories' })
-  @ApiResponse({
-    status: 200,
-    description: 'Categories retrieved successfully',
-  })
-  getCategories(@GetUser() user: JwtUser) {
-    return this.itemsService.getCategories(
-      user.businessId,
-      user.businessTypeId,
-    );
   }
 }

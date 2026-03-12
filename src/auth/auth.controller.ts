@@ -120,6 +120,7 @@ export class AuthController {
       user: {
         id: user.id,
         branchId: user.branchId,
+        businessTypeId: user.businessTypeId,
         phone: user.phone,
         role: user.role,
         businessId: user.businessId,

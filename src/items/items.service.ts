@@ -361,10 +361,15 @@ export class ItemsService {
 
     return { success: true, data: ledger };
   }
-  getCategories(businessId: string, businessTypeId: string) {
-    return this.prisma.category.findMany({
-      where: { businessId, businessTypeId },
+  async getCategories(businessTypeId: string) {
+    const categories = await this.prisma.category.findMany({
+      where: { businessTypeId },
       orderBy: { name: 'asc' },
     });
+
+    return {
+      success: true,
+      data: categories,
+    };
   }
 }

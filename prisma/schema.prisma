@@ -68,6 +68,9 @@ model Business {
   businessTypeId    String
   purchases         Purchase[]
   purchaseReturns   PurchaseReturn[]
+  saleReturns       SaleReturn[]
+  purchaseOrders    PurchaseOrder[]
+  paymentPlans      PaymentPlan[]
 }
 
 enum AuthProvider {
@@ -269,7 +272,7 @@ model PartyCategory {
 }
 
 model Party {
-  id              String         @id @default(cuid())
+  id              String    @id @default(cuid())
   businessId      String
   branchId        String?
   categoryId      String?
@@ -277,29 +280,85 @@ model Party {
   phone           String?
   email           String?
   address         String?
-  type            String         @default("customer")
-  customerTier    String?
-  openingBalance  Float          @default(0)
-  currentBalance  Float          @default(0)
+  type            String    @default("customer") // customer, supplier, both
+  customerTier    String? // regular, wholesale, vip, premium
+  openingBalance  Float     @default(0)
+  currentBalance  Float     @default(0)
   creditLimit     Float?
-  paymentTerms    Int?
+  paymentTerms    Int? // Payment terms in days
   notes           String?
-  isActive        Boolean        @default(true)
-  riskLevel       String?
+  isActive        Boolean   @default(true)
+  riskLevel       String? // low, medium, high
   lastPaymentDate DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  category        PartyCategory? @relation(fields: [categoryId], references: [id])
-  branch          Branch?        @relation(fields: [branchId], references: [id])
-  business        Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  partyLedger     PartyLedger[]
-  payments        Payment[]
-  sales           Sale[]
-  purchases       Purchase[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  category     PartyCategory? @relation(fields: [categoryId], references: [id])
+  branch       Branch?        @relation(fields: [branchId], references: [id])
+  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  partyLedger  PartyLedger[]
+  payments     Payment[]
+  paymentPlans PaymentPlan[]
+  purchases    Purchase[]
+  sales        Sale[]
 
   @@index([businessId])
   @@index([branchId])
   @@index([type])
+  @@index([deletedAt])
+}
+
+model PaymentPlan {
+  id                String    @id @default(cuid())
+  businessId        String
+  partyId           String
+  saleId            String?
+  totalAmount       Float
+  paidAmount        Float     @default(0)
+  remainingAmount   Float
+  totalInstallments Int       @default(1)
+  frequency         String    @default("monthly") // weekly, biweekly, monthly
+  startDate         DateTime
+  endDate           DateTime?
+  status            String    @default("active") // active, completed, cancelled, defaulted
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  business           Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  party              Party         @relation(fields: [partyId], references: [id])
+  installmentRecords Installment[]
+
+  @@index([businessId])
+  @@index([partyId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Installment {
+  id             String    @id @default(cuid())
+  paymentPlanId  String
+  installmentNo  Int
+  amount         Float
+  dueDate        DateTime
+  paidDate       DateTime?
+  paidAmount     Float     @default(0)
+  status         String    @default("pending") // pending, paid, partial, overdue
+  reminderSent   Boolean   @default(false)
+  reminderSentAt DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+
+  @@index([paymentPlanId])
+  @@index([dueDate])
+  @@index([status])
+  @@index([deletedAt])
 }
 
 model PartyLedger {
@@ -410,31 +469,32 @@ model StockLedger {
 }
 
 model Sale {
-  id            String     @id @default(cuid())
+  id            String       @id @default(cuid())
   businessId    String
   branchId      String?
   invoiceNo     String
   partyId       String?
   subtotal      Float
-  discount      Float      @default(0)
-  tax           Float      @default(0)
+  discount      Float        @default(0)
+  tax           Float        @default(0)
   total         Float
-  paidAmount    Float      @default(0)
-  dueAmount     Float      @default(0)
-  paymentMethod String     @default("cash")
+  paidAmount    Float        @default(0)
+  dueAmount     Float        @default(0)
+  paymentMethod String       @default("cash")
   pricingTier   String?
-  status        String     @default("completed")
-  profit        Float      @default(0)
+  status        String       @default("completed")
+  profit        Float        @default(0)
   notes         String?
   createdBy     String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   payments      Payment[]
-  party         Party?     @relation(fields: [partyId], references: [id])
-  branch        Branch?    @relation(fields: [branchId], references: [id])
-  business      Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user          User?      @relation(fields: [createdBy], references: [id])
+  party         Party?       @relation(fields: [partyId], references: [id])
+  branch        Branch?      @relation(fields: [branchId], references: [id])
+  business      Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user          User?        @relation(fields: [createdBy], references: [id])
   items         SaleItem[]
+  saleReturns   SaleReturn[]
 
   @@unique([businessId, invoiceNo])
   @@index([businessId])
@@ -459,6 +519,112 @@ model SaleItem {
 
   @@index([saleId])
   @@index([itemId])
+}
+
+model SaleReturn {
+  id           String    @id @default(cuid())
+  businessId   String
+  branchId     String?
+  saleId       String
+  returnNo     String // SRN-YYYYMMDD-XXXX
+  partyId      String?
+  subtotal     Float
+  discount     Float     @default(0)
+  tax          Float     @default(0)
+  total        Float
+  refundAmount Float     @default(0)
+  refundMethod String? // cash, credit_note, bank
+  status       String    @default("completed") // draft, completed, cancelled
+  reason       String?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  sale     Sale             @relation(fields: [saleId], references: [id])
+  business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items    SaleReturnItem[]
+
+  @@unique([businessId, returnNo])
+  @@index([businessId])
+  @@index([saleId])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model SaleReturnItem {
+  id           String    @id @default(cuid())
+  saleReturnId String
+  saleItemId   String
+  itemId       String
+  itemName     String
+  quantity     Float
+  unitPrice    Float
+  costPrice    Float
+  discount     Float     @default(0)
+  total        Float
+  reason       String?
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+
+  @@index([saleReturnId])
+  @@index([itemId])
+  @@index([deletedAt])
+}
+
+// ============================================
+// PURCHASES & RETURNS
+// ============================================
+
+model PurchaseOrder {
+  id           String    @id @default(cuid())
+  businessId   String
+  branchId     String?
+  supplierId   String?
+  poNo         String // PO-YYYYMMDD-XXXX
+  subtotal     Float
+  discount     Float     @default(0)
+  tax          Float     @default(0)
+  total        Float
+  status       String    @default("draft") // draft, submitted, approved, partially_received, received, cancelled
+  expectedDate DateTime?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  business Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items    PurchaseOrderItem[]
+
+  @@unique([businessId, poNo])
+  @@index([businessId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model PurchaseOrderItem {
+  id              String    @id @default(cuid())
+  purchaseOrderId String
+  itemId          String
+  itemName        String
+  quantity        Float
+  unitCost        Float
+  total           Float
+  receivedQty     Float     @default(0)
+  status          String    @default("pending") // pending, partially_received, received
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([itemId])
+  @@index([deletedAt])
 }
 
 model Payment {

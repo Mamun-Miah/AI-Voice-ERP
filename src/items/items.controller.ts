@@ -20,6 +20,8 @@ import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { QueryItemDto } from './dto/query-item.dto';
 import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
+import { ImportItemsDto } from './dto/import-items.dto';
+import { StockTransferDto } from './dto/stock-transfer.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import type { JwtUser } from 'src/auth/types/jwt-user.type';
@@ -104,6 +106,30 @@ export class ItemsController {
       user.businessId,
       user.branchId,
       id,
+      user.id,
+      dto,
+    );
+  }
+
+  @Post('import')
+  @ApiOperation({ summary: 'Bulk import items' })
+  @ApiResponse({ status: 201, description: 'Items imported successfully' })
+  importItems(@GetUser() user: JwtUser, @Body() dto: ImportItemsDto) {
+    return this.itemsService.importItems(
+      user.businessId,
+      user.branchId,
+      user.id,
+      dto,
+    );
+  }
+
+  @Post('transfer')
+  @ApiOperation({ summary: 'Transfer stock between branches' })
+  @ApiResponse({ status: 200, description: 'Stock transferred successfully' })
+  @ApiResponse({ status: 400, description: 'Insufficient stock or invalid branches' })
+  transferStock(@GetUser() user: JwtUser, @Body() dto: StockTransferDto) {
+    return this.itemsService.transferStock(
+      user.businessId,
       user.id,
       dto,
     );

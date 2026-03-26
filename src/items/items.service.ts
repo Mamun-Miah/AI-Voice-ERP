@@ -10,6 +10,8 @@ import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { QueryItemDto } from './dto/query-item.dto';
 import { StockAdjustmentDto } from './dto/stock-adjustment.dto';
+import { ImportItemsDto } from './dto/import-items.dto';
+import { StockTransferDto } from './dto/stock-transfer.dto';
 import { Prisma } from '@prisma/client';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ export class ItemsService {
         minStock: dto.minStock ?? 0,
         maxStock: dto.maxStock ?? null,
         supplierId: dto.supplierId,
+        trackBatch: dto.trackBatch ?? false,
         isActive: true,
       },
       include: {
@@ -197,6 +200,82 @@ export class ItemsService {
     return {
       success: true,
       data: { ...item, ...calcFields(item) },
+    };
+  }
+
+  // ─── FILE IMPORT ───────────────────────────────────────────────────────────
+  async importItems(
+    businessId: string,
+    branchId: string,
+    userId: string | null,
+    dto: ImportItemsDto,
+  ) {
+    const results = await this.prisma.$transaction(
+      async (tx) => {
+        const createdItems: any[] = [];
+        for (const itemDto of dto.items) {
+          if (itemDto.sku) {
+            const existing = await tx.item.findFirst({
+              where: { businessId, branchId, sku: itemDto.sku },
+            });
+            if (existing) {
+              throw new ConflictException(`An item with SKU "${itemDto.sku}" already exists.`);
+            }
+          }
+
+          const item = await tx.item.create({
+            data: {
+              businessId,
+              branchId,
+              name: itemDto.name,
+              nameBn: itemDto.nameBn,
+              sku: itemDto.sku,
+              barcode: itemDto.barcode,
+              categoryId: itemDto.categoryId,
+              description: itemDto.description,
+              unit: itemDto.unit ?? 'pcs',
+              costPrice: itemDto.costPrice ?? 0,
+              sellingPrice: itemDto.sellingPrice ?? 0,
+              wholesalePrice: itemDto.wholesalePrice ?? null,
+              vipPrice: itemDto.vipPrice ?? null,
+              minimumPrice: itemDto.minimumPrice ?? null,
+              currentStock: itemDto.currentStock ?? 0,
+              minStock: itemDto.minStock ?? 0,
+              maxStock: itemDto.maxStock ?? null,
+              supplierId: itemDto.supplierId,
+              trackBatch: itemDto.trackBatch ?? false,
+              isActive: true,
+            },
+          });
+
+          if ((itemDto.currentStock ?? 0) > 0) {
+            await tx.stockLedger.create({
+              data: {
+                businessId,
+                branchId,
+                itemId: item.id,
+                type: 'purchase',
+                quantity: itemDto.currentStock!,
+                previousStock: 0,
+                newStock: itemDto.currentStock!,
+                referenceType: 'adjustment',
+                reason: 'Import opening stock',
+                createdBy: userId,
+              },
+            });
+          }
+          createdItems.push(item);
+        }
+        return createdItems;
+      },
+      { timeout: 10000 },
+    );
+
+    this.logger.info({ businessId, count: results.length }, 'Imported items');
+
+    return {
+      success: true,
+      message: `${results.length} items imported successfully`,
     };
   }
 
@@ -251,6 +330,7 @@ export class ItemsService {
         ...(dto.minStock !== undefined && { minStock: dto.minStock }),
         ...(dto.maxStock !== undefined && { maxStock: dto.maxStock }),
         ...(dto.supplierId !== undefined && { supplierId: dto.supplierId }),
+        ...(dto.trackBatch !== undefined && { trackBatch: dto.trackBatch }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
       include: {
@@ -322,6 +402,107 @@ export class ItemsService {
     return {
       success: true,
       data: { ...updated, ...calcFields(updated) },
+    };
+  }
+
+  // ─── STOCK TRANSFER ───────────────────────────────────────────────────────
+  async transferStock(
+    businessId: string,
+    userId: string | null,
+    dto: StockTransferDto,
+  ) {
+    if (dto.fromBranchId === dto.toBranchId) {
+      throw new BadRequestException('Source and destination branches must be different.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const sourceItem = await tx.item.findFirst({
+        where: { id: dto.itemId, businessId, branchId: dto.fromBranchId },
+      });
+
+      if (!sourceItem) {
+        throw new NotFoundException(`Item not found in source branch.`);
+      }
+
+      if (sourceItem.currentStock < dto.quantity) {
+        throw new BadRequestException(`Insufficient stock. Available: ${sourceItem.currentStock}`);
+      }
+
+      let targetItem = await tx.item.findFirst({
+        where: { businessId, branchId: dto.toBranchId, sku: sourceItem.sku, name: sourceItem.name },
+      });
+
+      if (!targetItem) {
+        targetItem = await tx.item.create({
+          data: {
+            businessId,
+            branchId: dto.toBranchId,
+            name: sourceItem.name,
+            nameBn: sourceItem.nameBn,
+            sku: sourceItem.sku,
+            barcode: sourceItem.barcode,
+            categoryId: sourceItem.categoryId,
+            unit: sourceItem.unit,
+            costPrice: sourceItem.costPrice,
+            sellingPrice: sourceItem.sellingPrice,
+            currentStock: 0,
+            trackBatch: sourceItem.trackBatch,
+            isActive: true,
+          }
+        });
+      }
+
+      const prevSourceStock = sourceItem.currentStock;
+      const prevTargetStock = targetItem.currentStock;
+
+      await tx.item.update({
+        where: { id: sourceItem.id },
+        data: { currentStock: prevSourceStock - dto.quantity },
+      });
+
+      await tx.stockLedger.create({
+        data: {
+          businessId,
+          branchId: dto.fromBranchId,
+          itemId: sourceItem.id,
+          type: 'transfer_out',
+          quantity: dto.quantity,
+          previousStock: prevSourceStock,
+          newStock: prevSourceStock - dto.quantity,
+          toBranchId: dto.toBranchId,
+          referenceType: 'transfer',
+          notes: dto.notes,
+          createdBy: userId,
+        },
+      });
+
+      await tx.item.update({
+        where: { id: targetItem.id },
+        data: { currentStock: prevTargetStock + dto.quantity },
+      });
+
+      await tx.stockLedger.create({
+        data: {
+          businessId,
+          branchId: dto.toBranchId,
+          itemId: targetItem.id,
+          type: 'transfer_in',
+          quantity: dto.quantity,
+          previousStock: prevTargetStock,
+          newStock: prevTargetStock + dto.quantity,
+          fromBranchId: dto.fromBranchId,
+          referenceType: 'transfer',
+          notes: dto.notes,
+          createdBy: userId,
+        },
+      });
+    });
+
+    this.logger.info({ businessId, itemId: dto.itemId }, 'Stock transfer completed');
+
+    return {
+      success: true,
+      message: 'Stock transferred successfully',
     };
   }
 

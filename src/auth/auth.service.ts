@@ -20,30 +20,30 @@ export class AuthService {
     private jwtService: JwtService,
     @InjectPinoLogger(AuthService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
   private async findUserByPhone(phone: string) {
-    return this.prisma.user.findUnique({ where: { phone } });
+    return this.prisma.user.findUnique({ where: { phone }, include: { role: true } });
   }
 
   private async findUserById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.prisma.user.findUnique({ where: { id }, include: { role: true } });
   }
 
   private buildTokenPayload(user: {
     id: string;
     phone: string;
     name: string | null;
-    role: string;
+    role?: any;
     businessId: string;
   }) {
     return {
       sub: user.id,
       phone: user.phone,
       username: user.name,
-      role: user.role,
+      role: user.role?.name || 'owner',
       businessId: user.businessId,
     };
   }
@@ -92,12 +92,20 @@ export class AuthService {
           businessTypeId: businessType.id,
         },
       });
-      //create branch id
       const branch = await tx.branch.create({
         data: {
           name: 'Main Branch',
           businessId: business.id,
           isMain: true,
+        },
+      });
+      const role = await tx.role.create({
+        data: {
+          businessId: business.id,
+          name: 'owner',
+          permissions: '*',
+          isSystem: true,
+          isDefault: true,
         },
       });
       const user = await tx.user.create({
@@ -109,7 +117,7 @@ export class AuthService {
           businessTypeId: businessType.id,
           provider: 'PHONE',
           isPhoneVerified: false,
-          role: 'owner',
+          roleId: role.id,
         },
       });
 
@@ -221,7 +229,7 @@ export class AuthService {
         branchId: user.branchId,
         name: user.name,
         phone: user.phone,
-        role: user.role,
+        role: user.role?.name || 'owner',
       },
       business,
     };

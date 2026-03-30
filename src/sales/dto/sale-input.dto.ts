@@ -15,6 +15,11 @@ export class SaleItemInputDto {
   @IsNotEmpty()
   itemId: string;
 
+  @ApiPropertyOptional({ example: 'clx1234batchid' })
+  @IsOptional()
+  @IsString()
+  batchId?: string;
+
   @ApiPropertyOptional({ example: 'Rice (1kg)' })
   @IsOptional()
   @IsString()

@@ -219,7 +219,9 @@ export class ItemsService {
               where: { businessId, branchId, sku: itemDto.sku },
             });
             if (existing) {
-              throw new ConflictException(`An item with SKU "${itemDto.sku}" already exists.`);
+              throw new ConflictException(
+                `An item with SKU "${itemDto.sku}" already exists.`,
+              );
             }
           }
 
@@ -412,7 +414,9 @@ export class ItemsService {
     dto: StockTransferDto,
   ) {
     if (dto.fromBranchId === dto.toBranchId) {
-      throw new BadRequestException('Source and destination branches must be different.');
+      throw new BadRequestException(
+        'Source and destination branches must be different.',
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -425,11 +429,18 @@ export class ItemsService {
       }
 
       if (sourceItem.currentStock < dto.quantity) {
-        throw new BadRequestException(`Insufficient stock. Available: ${sourceItem.currentStock}`);
+        throw new BadRequestException(
+          `Insufficient stock. Available: ${sourceItem.currentStock}`,
+        );
       }
 
       let targetItem = await tx.item.findFirst({
-        where: { businessId, branchId: dto.toBranchId, sku: sourceItem.sku, name: sourceItem.name },
+        where: {
+          businessId,
+          branchId: dto.toBranchId,
+          sku: sourceItem.sku,
+          name: sourceItem.name,
+        },
       });
 
       if (!targetItem) {
@@ -448,7 +459,7 @@ export class ItemsService {
             currentStock: 0,
             trackBatch: sourceItem.trackBatch,
             isActive: true,
-          }
+          },
         });
       }
 
@@ -498,7 +509,10 @@ export class ItemsService {
       });
     });
 
-    this.logger.info({ businessId, itemId: dto.itemId }, 'Stock transfer completed');
+    this.logger.info(
+      { businessId, itemId: dto.itemId },
+      'Stock transfer completed',
+    );
 
     return {
       success: true,

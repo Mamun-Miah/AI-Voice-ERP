@@ -143,14 +143,15 @@ export class SalesService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(SalesService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   // ─── LIST ──────────────────────────────────────────────────────────────────
   async findAll(businessId: string, branchId: string, query: QuerySaleDto) {
     const page = parseInt(query.page ?? '1', 10);
     const limit = parseInt(query.limit ?? '20', 10);
 
-    const where: Prisma.SaleWhereInput = { businessId, branchId };
+    const where: Prisma.SaleWhereInput = { businessId };
+    if (branchId) where.branchId = branchId;
 
     if (query.partyId) where.partyId = query.partyId;
 
@@ -196,7 +197,7 @@ export class SalesService {
   // ─── GET ONE ───────────────────────────────────────────────────────────────
   async findOne(businessId: string, branchId: string, id: string) {
     const sale = await this.prisma.sale.findFirst({
-      where: { id, businessId, branchId },
+      where: { id, businessId, ...(branchId && { branchId }) },
       include: singleSaleInclude,
     });
 
@@ -233,7 +234,7 @@ export class SalesService {
       for (const input of items) {
         const dbItem = await tx.item.findUnique({ where: { id: input.itemId } });
         if (!dbItem) throw new BadRequestException(`Item not found: ${input.itemId}`);
-        
+
         if (dbItem.currentStock < input.quantity) {
           throw new BadRequestException(
             `Insufficient stock for "${dbItem.name}". Available: ${dbItem.currentStock}, Requested: ${input.quantity}`,
@@ -257,10 +258,10 @@ export class SalesService {
 
           for (const batch of batches) {
             if (qtyToFulfill <= 0) break;
-            
+
             const allocateQty = Math.min(qtyToFulfill, batch.remainingQty);
             qtyToFulfill -= allocateQty;
-            
+
             const allocatedDiscount = (itemDiscount / input.quantity) * allocateQty;
             const allocatedTotal = allocateQty * input.unitPrice - allocatedDiscount;
             const allocatedProfit = (input.unitPrice - batch.costPrice) * allocateQty - allocatedDiscount;
@@ -289,7 +290,7 @@ export class SalesService {
         } else {
           const itemTotal = input.quantity * input.unitPrice - itemDiscount;
           const itemProfit = (input.unitPrice - dbItem.costPrice) * input.quantity - itemDiscount;
-          
+
           saleItemsData.push({
             itemId: dbItem.id,
             batchId: null,
@@ -312,8 +313,9 @@ export class SalesService {
       const newSale = await tx.sale.create({
         data: {
           businessId,
+          branchId: branchId || null,
           invoiceNo,
-          partyId: partyId ?? null,
+          partyId: partyId || null,
           subtotal,
           discount,
           tax,
@@ -436,7 +438,7 @@ export class SalesService {
     dto: UpdateSaleDto,
   ) {
     const existing = await this.prisma.sale.findFirst({
-      where: { id, businessId, branchId },
+      where: { id, businessId, ...(branchId && { branchId }) },
       include: { items: true, party: true },
     });
 
@@ -549,7 +551,7 @@ export class SalesService {
     dto: EditSaleDto,
   ) {
     const existing = await this.prisma.sale.findFirst({
-      where: { id, businessId, branchId },
+      where: { id, businessId, ...(branchId && { branchId }) },
       include: { items: true },
     });
 
@@ -588,7 +590,7 @@ export class SalesService {
             where: { id: oldItem.itemId },
             data: { currentStock: restoredStock },
           });
-          
+
           if (oldItem.batchId) {
             await tx.batch.update({
               where: { id: oldItem.batchId },
@@ -618,7 +620,7 @@ export class SalesService {
         for (const input of dto.items) {
           const dbItem = await tx.item.findUnique({ where: { id: input.itemId } });
           if (!dbItem) throw new BadRequestException(`Item not found: ${input.itemId}`);
-          
+
           if (dbItem.currentStock < input.quantity) {
             throw new BadRequestException(
               `Insufficient stock for "${dbItem.name}". Available: ${dbItem.currentStock}, Requested: ${input.quantity}`,
@@ -641,10 +643,10 @@ export class SalesService {
 
             for (const batch of batches) {
               if (qtyToFulfill <= 0) break;
-              
+
               const allocateQty = Math.min(qtyToFulfill, batch.remainingQty);
               qtyToFulfill -= allocateQty;
-              
+
               const allocatedDiscount = (itemDiscount / input.quantity) * allocateQty;
               const allocatedTotal = allocateQty * input.unitPrice - allocatedDiscount;
               const allocatedProfit = (input.unitPrice - batch.costPrice) * allocateQty - allocatedDiscount;
@@ -673,7 +675,7 @@ export class SalesService {
           } else {
             const itemTotal = input.quantity * input.unitPrice - itemDiscount;
             const itemProfit = (input.unitPrice - dbItem.costPrice) * input.quantity - itemDiscount;
-            
+
             saleItemsData.push({
               itemId: dbItem.id,
               batchId: null,
@@ -716,7 +718,7 @@ export class SalesService {
               lastSaleDate: new Date(),
             },
           });
-          
+
           await tx.stockLedger.create({
             data: {
               businessId,
@@ -733,7 +735,7 @@ export class SalesService {
             },
           });
         }
-        
+
         newSubtotal = saleItemsData.reduce((sum, i) => sum + i.total, 0);
         newTotalProfit = saleItemsData.reduce((sum, i) => sum + i.profit, 0);
       }
@@ -773,7 +775,7 @@ export class SalesService {
       return tx.sale.update({
         where: { id },
         data: {
-          partyId: newPartyId,
+          partyId: newPartyId || null,
           subtotal: newSubtotal,
           discount: newDiscount,
           tax: newTax,
@@ -803,7 +805,7 @@ export class SalesService {
     userId: string | null,
   ) {
     const existing = await this.prisma.sale.findFirst({
-      where: { id, businessId, branchId },
+      where: { id, businessId, ...(branchId && { branchId }) },
       include: { items: true },
     });
 
@@ -827,16 +829,16 @@ export class SalesService {
         });
         if (!item) continue;
         const restoredStock = item.currentStock + saleItem.quantity;
-          await tx.item.update({
-            where: { id: saleItem.itemId },
-            data: { currentStock: restoredStock },
+        await tx.item.update({
+          where: { id: saleItem.itemId },
+          data: { currentStock: restoredStock },
+        });
+        if (saleItem.batchId) {
+          await tx.batch.update({
+            where: { id: saleItem.batchId },
+            data: { remainingQty: { increment: saleItem.quantity } },
           });
-          if (saleItem.batchId) {
-            await tx.batch.update({
-              where: { id: saleItem.batchId },
-              data: { remainingQty: { increment: saleItem.quantity } },
-            });
-          }
+        }
         await tx.stockLedger.create({
           data: {
             businessId,
@@ -916,7 +918,7 @@ export class SalesService {
     // ── Shared where clause builder ────────────────────────────────────────
     const makeWhere = (from: Date, to: Date): Prisma.SaleWhereInput => ({
       businessId,
-      branchId,
+      ...(branchId && { branchId }),
       status: { notIn: ['cancelled', 'returned'] },
       createdAt: { gte: from, lt: to },
     });
@@ -956,7 +958,7 @@ export class SalesService {
       this.prisma.sale.aggregate({
         where: {
           businessId,
-          branchId,
+          ...(branchId && { branchId }),
           status: { notIn: ['cancelled', 'returned'] },
         },
         _sum: { total: true, profit: true },
@@ -968,7 +970,7 @@ export class SalesService {
       this.prisma.sale.count({
         where: {
           businessId,
-          branchId,
+          ...(branchId && { branchId }),
           status: { notIn: ['cancelled', 'returned'] },
         },
       }),

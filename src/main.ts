@@ -44,7 +44,7 @@ async function bootstrap() {
 
   // 8. CORS
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: ['http://localhost:3000', 'https://hellokhata.vercel.app'],
     credentials: true,
   });
 

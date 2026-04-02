@@ -56,15 +56,15 @@ export class CreatePartyDto {
   @IsEnum(PartyType)
   type?: PartyType;
 
-  @ApiPropertyOptional({ enum: CustomerTier })
-  @IsOptional()
-  @IsEnum(CustomerTier)
-  customerTier?: CustomerTier;
+  // @ApiPropertyOptional({ enum: CustomerTier })
+  // @IsOptional()
+  // @IsEnum(CustomerTier)
+  // customerTier?: CustomerTier;
 
-  @ApiPropertyOptional({ example: 'clx1234categoryid' })
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
+  // @ApiPropertyOptional({ example: 'clx1234categoryid' })
+  // @IsOptional()
+  // @IsString()
+  // categoryId?: string;
 
   @ApiPropertyOptional({ example: 'clx1234branchid' })
   @IsOptional()

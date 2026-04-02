@@ -89,7 +89,7 @@ export class PartiesService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(PartiesService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   // ─── LIST ──────────────────────────────────────────────────────────────────
   async findAll(businessId: string, query: QueryPartyDto) {
@@ -239,14 +239,14 @@ export class PartiesService {
     }
 
     // Validate category ownership
-    if (dto.categoryId) {
-      const category = await this.prisma.partyCategory.findUnique({
-        where: { id: dto.categoryId },
-      });
-      if (!category || category.businessId !== businessId) {
-        throw new BadRequestException('Invalid party category.');
-      }
-    }
+    // if (dto.categoryId) {
+    //   const category = await this.prisma.partyCategory.findUnique({
+    //     where: { id: dto.categoryId },
+    //   });
+    //   if (!category || category.businessId !== businessId) {
+    //     throw new BadRequestException('Invalid party category.');
+    //   }
+    // }
 
     // Validate branch ownership
     if (dto.branchId) {
@@ -269,8 +269,8 @@ export class PartiesService {
           email: dto.email?.trim() ?? null,
           address: dto.address?.trim() ?? null,
           type: dto.type ?? 'customer',
-          customerTier: dto.customerTier ?? null,
-          categoryId: dto.categoryId ?? null,
+          // customerTier: dto.customerTier ?? null,
+          // categoryId: dto.categoryId ?? null,
           branchId: dto.branchId ?? null,
           openingBalance,
           currentBalance: openingBalance,

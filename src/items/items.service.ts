@@ -567,4 +567,43 @@ export class ItemsService {
       data: categories,
     };
   }
+
+  // ─── STATUS ───────────────────────────────────────────────────────────────
+  async getStatus(businessId: string, branchId: string) {
+    const items = await this.prisma.item.findMany({
+      where: {
+        businessId,
+        branchId,
+        isActive: true,
+      },
+      select: {
+        currentStock: true,
+        minStock: true,
+        costPrice: true,
+      },
+    });
+
+    const totalItems = items.length;
+    let totalStock = 0;
+    let stockValue = 0;
+    let lowStock = 0;
+
+    for (const item of items) {
+      totalStock += item.currentStock;
+      stockValue += item.currentStock * item.costPrice;
+      if (item.currentStock <= item.minStock) {
+        lowStock++;
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        totalItems,
+        totalStock,
+        stockValue,
+        lowStock,
+      },
+    };
+  }
 }

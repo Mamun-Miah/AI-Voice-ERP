@@ -417,6 +417,22 @@ export class SalesService {
           where: { id: account.id },
           data: { currentBalance: account.currentBalance + paidAmount },
         });
+
+        // Track the payment in a separate record that links the sale to the account
+        await tx.payment.create({
+          data: {
+            businessId,
+            branchId: branchId || undefined,
+            partyId: partyId || undefined,
+            type: 'sale',
+            mode: paymentMethod,
+            accountId: account.id,
+            amount: paidAmount,
+            saleId: newSale.id,
+            reference: `Invoice ${invoiceNo}`,
+            createdBy: userId,
+          },
+        });
       }
 
       return newSale;

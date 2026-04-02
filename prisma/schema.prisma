@@ -783,7 +783,7 @@ model Payment {
   id            String    @id @default(cuid())
   businessId    String
   branchId      String?
-  partyId       String
+  partyId       String?
   type          String
   mode          String    @default("cash")
   accountId     String?
@@ -799,7 +799,7 @@ model Payment {
   deletedAt     DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  party    Party    @relation(fields: [partyId], references: [id])
+  party    Party?    @relation(fields: [partyId], references: [id])
   sale     Sale?    @relation(fields: [saleId], references: [id])
 
   @@index([businessId])

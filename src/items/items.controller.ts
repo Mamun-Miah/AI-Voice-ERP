@@ -50,6 +50,13 @@ export class ItemsController {
   getCategories(@GetUser() user: JwtUser) {
     return this.itemsService.getCategories(user.businessTypeId);
   }
+  @Get('status')
+  @ApiOperation({ summary: 'Get summary statistics of inventory items' })
+  @ApiResponse({ status: 200, description: 'Items status retrieved' })
+  getStatus(@GetUser() user: JwtUser) {
+    return this.itemsService.getStatus(user.businessId, user.branchId);
+  }
+
   // GET /items/:id  — includes last 10 stockHistory entries
   @Get(':id')
   @ApiOperation({ summary: 'Get a single item with recent stock history' })

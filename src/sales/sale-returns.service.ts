@@ -44,7 +44,7 @@ export class SaleReturnsService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(SaleReturnsService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   async findAll(
     businessId: string,
@@ -123,13 +123,15 @@ export class SaleReturnsService {
     if (!sale) throw new NotFoundException('Original sale not found.');
 
     if (sale.status === 'cancelled') {
-        throw new BadRequestException('Cannot process return for a cancelled sale.');
+      throw new BadRequestException('Cannot process return for a cancelled sale.');
     }
 
-    const saleItemMap = new Map(sale.items.map((i) => [i.id, i]));
+    const saleItemMap = new Map<string, (typeof sale.items)[0]>(
+      sale.items.map((i) => [i.id, i]),
+    );
     const returnItemsData: any[] = [];
     let refundSubtotal = 0;
-    
+
     // Validate quantities
     for (const input of items) {
       const saleItem = saleItemMap.get(input.saleItemId);
@@ -167,7 +169,7 @@ export class SaleReturnsService {
     // Process return
     const saleReturn = await this.prisma.$transaction(async (tx) => {
       const returnNo = await generateReturnNo(tx, businessId);
-      
+
       const newReturn = await tx.saleReturn.create({
         data: {
           businessId,
@@ -210,103 +212,117 @@ export class SaleReturnsService {
         });
 
         // Restore Stock
-        const currentItem = await tx.item.findUnique({ where: { id: item.itemId }});
+        const currentItem = await tx.item.findUnique({ where: { id: item.itemId } });
         if (currentItem) {
-            const restoredStock = currentItem.currentStock + item.quantity;
-            await tx.item.update({
+          const restoredStock = currentItem.currentStock + item.quantity;
+          await tx.item.update({
             where: { id: item.itemId },
             data: { currentStock: restoredStock }
+          });
+
+          // Adjust Batch
+          if (item.batchId) {
+            await tx.batch.update({
+              where: { id: item.batchId },
+              data: { remainingQty: { increment: item.quantity } }
             });
+          }
 
-            // Adjust Batch
-            if (item.batchId) {
-                await tx.batch.update({
-                    where: { id: item.batchId },
-                    data: { remainingQty: { increment: item.quantity }}
-                });
-            }
-
-            // Ledger
-            await tx.stockLedger.create({
+          // Ledger
+          await tx.stockLedger.create({
             data: {
-                businessId,
-                itemId: item.itemId,
-                batchId: item.batchId,
-                type: 'return_in',
-                quantity: item.quantity,
-                previousStock: currentItem.currentStock,
-                newStock: restoredStock,
-                referenceId: newReturn.id,
-                referenceType: 'sale_return',
-                reason: item.reason ?? 'Sales Return',
-                createdBy: userId,
+              businessId,
+              itemId: item.itemId,
+              batchId: item.batchId,
+              type: 'return_in',
+              quantity: item.quantity,
+              previousStock: currentItem.currentStock,
+              newStock: restoredStock,
+              referenceId: newReturn.id,
+              referenceType: 'sale_return',
+              reason: item.reason ?? 'Sales Return',
+              createdBy: userId,
             }
-            });
+          });
         }
       }
 
       // Reconcile overall sale profit? The architecture doc says "Update Sale profit".
       const updatedSaleItems = await tx.saleItem.findMany({ where: { saleId: sale.id } });
       const currentProfit = updatedSaleItems.reduce((acc, si) => {
-         const effectiveQty = si.quantity - si.returnedQty;
-         const profitPerUnit = si.unitPrice - si.costPrice;
-         const discountRatio = effectiveQty / si.quantity;
-         return acc + (profitPerUnit * effectiveQty) - (si.discount * (isNaN(discountRatio) ? 0 : discountRatio));
+        const effectiveQty = si.quantity - si.returnedQty;
+        const profitPerUnit = si.unitPrice - si.costPrice;
+        const discountRatio = effectiveQty / si.quantity;
+        return acc + (profitPerUnit * effectiveQty) - (si.discount * (isNaN(discountRatio) ? 0 : discountRatio));
       }, 0);
 
       // Check if fully returned
       const allReturned = updatedSaleItems.every(si => si.quantity === si.returnedQty);
-      
+
       await tx.sale.update({
-          where: { id: sale.id },
-          data: { 
-              profit: currentProfit,
-              status: allReturned ? 'returned' : sale.status 
-          }
+        where: { id: sale.id },
+        data: {
+          profit: currentProfit,
+          status: allReturned ? 'returned' : sale.status
+        }
       });
 
-      // Handle Refunds
-      // If bank/bkash/cash, deduct from account balance
       if (refundMethod && accountId && refundMethod !== RefundMethod.CREDIT_NOTE) {
-         await tx.account.update({
-             where: { id: accountId },
-             data: { currentBalance: { decrement: refundSubtotal } }
-         });
+        await tx.account.update({
+          where: { id: accountId },
+          data: { currentBalance: { decrement: refundSubtotal } }
+        });
+
+        // Record a permanent payment entry for the refund
+        await tx.payment.create({
+          data: {
+            businessId,
+            branchId,
+            partyId: sale.partyId ?? undefined,
+            type: 'return',
+            mode: refundMethod,
+            accountId: accountId,
+            amount: refundSubtotal,
+            saleId: saleId,
+            reference: `Return SR-${returnNo}`,
+            createdBy: userId,
+          },
+        });
       }
 
       // If they had outstanding balance, we could credit their party account.
       if (sale.partyId) {
-         if (refundMethod === RefundMethod.CREDIT_NOTE || sale.dueAmount > 0) {
-             const party = await tx.party.findUnique({ where: { id: sale.partyId }});
-             if (party) {
-                 const newBalance = party.currentBalance - refundSubtotal;
-                 await tx.party.update({
-                     where: { id: party.id },
-                     data: { currentBalance: newBalance }
-                 });
+        if (refundMethod === RefundMethod.CREDIT_NOTE || sale.dueAmount > 0) {
+          const party = await tx.party.findUnique({ where: { id: sale.partyId } });
+          if (party) {
+            const newBalance = party.currentBalance - refundSubtotal;
+            await tx.party.update({
+              where: { id: party.id },
+              data: { currentBalance: newBalance }
+            });
 
-                 await tx.partyLedger.create({
-                    data: {
-                        businessId,
-                        partyId: party.id,
-                        type: 'return',
-                        referenceId: newReturn.id,
-                        referenceType: 'sale_return',
-                        amount: -refundSubtotal,
-                        balance: newBalance,
-                        description: `Sales Return SR-${returnNo}`,
-                        date: new Date()
-                    }
-                 });
-             }
-         }
+            await tx.partyLedger.create({
+              data: {
+                businessId,
+                partyId: party.id,
+                type: 'return',
+                referenceId: newReturn.id,
+                referenceType: 'sale_return',
+                amount: -refundSubtotal,
+                balance: newBalance,
+                description: `Sales Return SR-${returnNo}`,
+                date: new Date()
+              }
+            });
+          }
+        }
       }
 
       return newReturn;
     });
 
     this.logger.info({ returnId: saleReturn.id, saleId }, 'Sale return processed');
-    
+
     return { success: true, data: saleReturn };
   }
 
@@ -335,64 +351,64 @@ export class SaleReturnsService {
 
   async remove(businessId: string, branchId: string, id: string) {
     const existing = await this.prisma.saleReturn.findFirst({
-        where: { id, businessId, branchId },
-        include: { items: true }
+      where: { id, businessId, branchId },
+      include: { items: true }
     });
 
     if (!existing) throw new NotFoundException(`Return ${id} not found.`);
 
     if (existing.status === 'cancelled') {
-        throw new ForbiddenException('Return is already cancelled.');
+      throw new ForbiddenException('Return is already cancelled.');
     }
 
     // Reverse the return (soft delete essentially with stock reversal)
     await this.prisma.$transaction(async (tx) => {
-        for (const item of existing.items) {
-           // Restore returnedQty
-           await tx.saleItem.update({
-               where: { id: item.saleItemId },
-               data: { returnedQty: { decrement: item.quantity }}
-           });
-
-           // Deduct stock (since it was added during return)
-           const currentItem = await tx.item.findUnique({ where: { id: item.itemId }});
-           if (currentItem) {
-               const reversedStock = currentItem.currentStock - item.quantity;
-               await tx.item.update({
-                   where: { id: item.itemId },
-                   data: { currentStock: reversedStock }
-               });
-               
-               // we do not have batchId in saleReturnItem? The schema doesn't have it natively.
-               // It relies on saleItem. 
-               const originalSaleItem = await tx.saleItem.findUnique({ where: { id: item.saleItemId }});
-               if (originalSaleItem?.batchId) {
-                   await tx.batch.update({
-                       where: { id: originalSaleItem.batchId },
-                       data: { remainingQty: { decrement: item.quantity } }
-                   });
-               }
-
-               await tx.stockLedger.create({
-                   data: {
-                       businessId,
-                       itemId: item.itemId,
-                       type: 'adjustment',
-                       quantity: -item.quantity,
-                       previousStock: currentItem.currentStock,
-                       newStock: reversedStock,
-                       referenceId: existing.id,
-                       referenceType: 'sale_return_reversal',
-                       reason: 'Sale return reversed'
-                   }
-               });
-           }
-        }
-        
-        await tx.saleReturn.update({
-            where: { id },
-            data: { status: 'cancelled', deletedAt: new Date() }
+      for (const item of existing.items) {
+        // Restore returnedQty
+        await tx.saleItem.update({
+          where: { id: item.saleItemId },
+          data: { returnedQty: { decrement: item.quantity } }
         });
+
+        // Deduct stock (since it was added during return)
+        const currentItem = await tx.item.findUnique({ where: { id: item.itemId } });
+        if (currentItem) {
+          const reversedStock = currentItem.currentStock - item.quantity;
+          await tx.item.update({
+            where: { id: item.itemId },
+            data: { currentStock: reversedStock }
+          });
+
+          // we do not have batchId in saleReturnItem? The schema doesn't have it natively.
+          // It relies on saleItem. 
+          const originalSaleItem = await tx.saleItem.findUnique({ where: { id: item.saleItemId } });
+          if (originalSaleItem?.batchId) {
+            await tx.batch.update({
+              where: { id: originalSaleItem.batchId },
+              data: { remainingQty: { decrement: item.quantity } }
+            });
+          }
+
+          await tx.stockLedger.create({
+            data: {
+              businessId,
+              itemId: item.itemId,
+              type: 'adjustment',
+              quantity: -item.quantity,
+              previousStock: currentItem.currentStock,
+              newStock: reversedStock,
+              referenceId: existing.id,
+              referenceType: 'sale_return_reversal',
+              reason: 'Sale return reversed'
+            }
+          });
+        }
+      }
+
+      await tx.saleReturn.update({
+        where: { id },
+        data: { status: 'cancelled', deletedAt: new Date() }
+      });
     });
 
     this.logger.info({ returnId: id }, 'Sale return reversed/deleted');

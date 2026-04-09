@@ -1,13 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BatchesService } from './batches.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
@@ -20,53 +12,23 @@ import type { JwtUser } from 'src/auth/types/jwt-user.type';
 export class BatchesController {
   constructor(private readonly batchesService: BatchesService) {}
 
+  @Get('status')
+  @ApiOperation({ summary: 'Get batches status summary' })
+  getStatus(@GetUser() user: JwtUser) {
+    return this.batchesService.getStatus(user.businessId);
+  }
+
   @Get()
-  @ApiOperation({ summary: 'List all batches with filtering' })
+  @ApiOperation({ summary: 'List all batches with search and filtering' })
   findAll(
     @GetUser() user: JwtUser,
+    @Query('search') search?: string,
     @Query('status') status?: string,
-    @Query('expiryDays') expiryDays?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.batchesService.findAll(user.businessId, status, expiryDays);
-  }
-
-  @Get('available')
-  @ApiOperation({ summary: 'Get available batches for sales (FEFO)' })
-  findAvailable(
-    @GetUser() user: JwtUser,
-    @Query('itemId') itemId: string,
-    @Query('quantity') quantity?: string,
-  ) {
-    return this.batchesService.findAvailable(
-      user.businessId,
-      itemId,
-      quantity ? parseFloat(quantity) : undefined,
-    );
-  }
-
-  @Get('expiry-alerts')
-  @ApiOperation({ summary: 'Get batches expiring within threshold' })
-  getExpiryAlerts(
-    @GetUser() user: JwtUser,
-    @Query('days') days?: string,
-    @Query('includeExpired') includeExpired?: string,
-  ) {
-    return this.batchesService.getExpiryAlerts(
-      user.businessId,
-      days ? parseInt(days, 10) : undefined,
-      includeExpired === 'true',
-    );
-  }
-
-  @Post()
-  @ApiOperation({ summary: 'Create a new batch' })
-  create(@GetUser() user: JwtUser, @Body() dto: any) {
-    return this.batchesService.create(user.businessId, dto);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get detailed batch information' })
-  findOne(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.batchesService.findOne(user.businessId, id);
+    const pageNumber = page ? parseInt(page, 10) : 1;
+    const limitNumber = limit ? parseInt(limit, 10) : 10;
+    return this.batchesService.findAll(user.businessId, search, status, pageNumber, limitNumber);
   }
 }

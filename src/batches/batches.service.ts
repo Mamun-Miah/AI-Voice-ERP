@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
@@ -27,12 +27,95 @@ export class BatchesService {
     private readonly logger: PinoLogger,
   ) {}
 
-  async findAll(businessId: string, status?: string, expiryDays?: string) {
+  async getStatus(businessId: string) {
     const batches = await this.prisma.batch.findMany({
       where: { businessId, deletedAt: null },
-      include: { item: { select: { name: true, sku: true } } },
-      orderBy: [{ expiryDate: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        isActive: true,
+        remainingQty: true,
+        expiryDate: true,
+      }
     });
+
+    let activeBatches = 0;
+    let expired = 0;
+    let expiringIn30Days = 0;
+
+    for (const batch of batches) {
+      const status = getBatchStatus(batch);
+      if (status === 'active') activeBatches++;
+      else if (status === 'expired') expired++;
+      else if (status === 'expiring') expiringIn30Days++;
+    }
+
+    return {
+      success: true,
+      data: {
+        totalBatches: batches.length,
+        expired,
+        expiringIn30Days,
+        activeBatches,
+      }
+    };
+  }
+
+  async findAll(businessId: string, search?: string, statusFilter?: string, page: number = 1, limit: number = 10) {
+    const conditions: any[] = [
+      { businessId },
+      { deletedAt: null }
+    ];
+
+    if (search) {
+      conditions.push({
+        OR: [
+          { batchNumber: { contains: search, mode: 'insensitive' } },
+          { item: { name: { contains: search, mode: 'insensitive' } } },
+          { item: { sku: { contains: search, mode: 'insensitive' } } },
+        ]
+      });
+    }
+
+    const now = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(now.getDate() + 30);
+
+    if (statusFilter === 'expired') {
+      conditions.push({ isActive: true });
+      conditions.push({ remainingQty: { gt: 0 } });
+      conditions.push({ expiryDate: { lte: now, not: null } });
+    } else if (statusFilter === 'expiring') {
+      conditions.push({ isActive: true });
+      conditions.push({ remainingQty: { gt: 0 } });
+      conditions.push({ expiryDate: { gt: now, lte: thirtyDaysFromNow, not: null } });
+    } else if (statusFilter === 'depleted') {
+      conditions.push({ isActive: true });
+      conditions.push({ remainingQty: { lte: 0 } });
+    } else if (statusFilter === 'inactive') {
+      conditions.push({ isActive: false });
+    } else if (statusFilter === 'active') {
+      conditions.push({ isActive: true });
+      conditions.push({ remainingQty: { gt: 0 } });
+      conditions.push({
+        OR: [
+          { expiryDate: null },
+          { expiryDate: { gt: thirtyDaysFromNow } }
+        ]
+      });
+    }
+
+    const where = { AND: conditions };
+    const skip = (page - 1) * limit;
+
+    const [total, batches] = await Promise.all([
+      this.prisma.batch.count({ where }),
+      this.prisma.batch.findMany({
+        where,
+        include: { item: { select: { name: true, sku: true } } },
+        orderBy: [{ expiryDate: 'asc' }, { createdAt: 'desc' }],
+        skip,
+        take: limit,
+      })
+    ]);
 
     const enriched = batches.map(b => ({
       ...b,
@@ -43,201 +126,15 @@ export class BatchesService {
       daysUntilExpiry: getDaysUntilExpiry(b.expiryDate),
     }));
 
-    let filtered = enriched;
-    if (status && status !== 'all') {
-      filtered = filtered.filter(b => b.status === status);
-    }
-    if (expiryDays) {
-      const days = parseInt(expiryDays, 10);
-      filtered = filtered.filter(b => b.daysUntilExpiry !== null && b.daysUntilExpiry <= days);
-    }
-
-    return { success: true, data: filtered };
-  }
-
-  async findAvailable(businessId: string, itemId: string, requestedQty?: number) {
-    if (!itemId) {
-        throw new NotFoundException('itemId is required');
-    }
-
-    const item = await this.prisma.item.findFirst({
-        where: { id: itemId, businessId },
-    });
-
-    if (!item) {
-        throw new NotFoundException(`Item not found`);
-    }
-
-    const batches = await this.prisma.batch.findMany({
-      where: {
-        itemId,
-        businessId,
-        remainingQty: { gt: 0 },
-        isActive: true,
-        deletedAt: null,
-        OR: [
-          { expiryDate: null },
-          { expiryDate: { gt: new Date() } }
-        ]
-      },
-      orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }]
-    });
-
-    const enriched = batches.map(b => ({
-      ...b,
-      batchNo: b.batchNumber,
-      availableQty: b.remainingQty,
-      daysUntilExpiry: getDaysUntilExpiry(b.expiryDate),
-      urgency: this.getUrgency(b.expiryDate),
-    }));
-
-    let canFulfill = false;
-    let shortage = 0;
-    const suggestedAllocation: any[] = [];
-
-    if (requestedQty && requestedQty > 0) {
-      let remainingNeeded = requestedQty;
-      for (const b of enriched) {
-        if (remainingNeeded <= 0) break;
-        const take = Math.min(b.availableQty, remainingNeeded);
-        if (take > 0) {
-          suggestedAllocation.push({
-            batchId: b.id,
-            batchNo: b.batchNo,
-            quantity: take,
-            costPrice: b.costPrice,
-            expiryDate: b.expiryDate,
-          });
-          remainingNeeded -= take;
-        }
-      }
-      canFulfill = remainingNeeded <= 0;
-      shortage = remainingNeeded;
-    }
-
     return {
       success: true,
-      data: {
-        item: {
-            id: item.id,
-            name: item.name,
-            trackBatch: item.trackBatch,
-            currentStock: item.currentStock,
-        },
-        batchTracking: item.trackBatch,
-        totalAvailable: enriched.reduce((sum, b) => sum + b.availableQty, 0),
-        batches: enriched,
-        requestedQty,
-        canFulfill,
-        shortage,
-        suggestedAllocation,
+      data: enriched,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
       }
     };
-  }
-
-  private getUrgency(expiryDate: Date | null) {
-    const days = getDaysUntilExpiry(expiryDate);
-    if (days === null) return 'normal';
-    if (days <= 0) return 'expired';
-    if (days <= 7) return 'critical';
-    if (days <= 30) return 'warning';
-    return 'normal';
-  }
-
-  async getExpiryAlerts(businessId: string, thresholdDays = 30, includeExpired = false) {
-    const thresholdDate = new Date();
-    thresholdDate.setDate(thresholdDate.getDate() + thresholdDays);
-
-    const conditions: any[] = [{ expiryDate: { lte: thresholdDate } }];
-    if (!includeExpired) {
-        conditions.push({ expiryDate: { gt: new Date() } });
-    }
-
-    const batches = await this.prisma.batch.findMany({
-        where: {
-            businessId,
-            deletedAt: null,
-            remainingQty: { gt: 0 },
-            AND: conditions,
-        },
-        include: { item: { select: { name: true, sku: true } } },
-        orderBy: { expiryDate: 'asc' },
-    });
-
-    const alerts = batches.map(b => {
-        const days = getDaysUntilExpiry(b.expiryDate)!;
-        return {
-            id: b.id,
-            batchNo: b.batchNumber,
-            itemId: b.itemId,
-            itemName: b.item.name,
-            remainingQty: b.remainingQty,
-            expiryDate: b.expiryDate,
-            daysUntilExpiry: days,
-            urgency: this.getUrgency(b.expiryDate),
-            message: days > 0 ? `Expires in ${days} days` : 'Expired',
-            stockValue: b.remainingQty * b.costPrice,
-        };
-    });
-
-    const summary = {
-        total: alerts.length,
-        critical: alerts.filter(a => a.urgency === 'critical').length,
-        warning: alerts.filter(a => a.urgency === 'warning').length,
-        expired: alerts.filter(a => a.urgency === 'expired').length,
-        totalStockValue: alerts.reduce((sum, a) => sum + a.stockValue, 0),
-    };
-
-    return {
-        success: true,
-        data: {
-            alerts,
-            summary,
-            threshold: thresholdDays,
-            generatedAt: new Date(),
-        }
-    };
-  }
-
-  async create(businessId: string, dto: any) {
-    const item = await this.prisma.item.findFirst({
-        where: { id: dto.itemId, businessId }
-    });
-    if (!item) throw new NotFoundException('Item not found');
-
-    const batch = await this.prisma.batch.create({
-        data: {
-            businessId,
-            itemId: dto.itemId,
-            batchNumber: dto.batchNumber,
-            expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
-            manufactureDate: dto.manufactureDate ? new Date(dto.manufactureDate) : null,
-            quantity: dto.quantity || 0,
-            remainingQty: dto.quantity || 0,
-            costPrice: dto.costPrice || 0,
-            mrp: dto.mrp || null,
-            location: dto.location || null,
-        }
-    });
-
-    return { success: true, data: batch };
-  }
-
-  async findOne(businessId: string, id: string) {
-      const batch = await this.prisma.batch.findFirst({
-        where: { id, businessId, deletedAt: null },
-        include: { item: true }
-      });
-      if (!batch) throw new NotFoundException('Batch not found');
-
-      return {
-          success: true,
-          data: {
-              ...batch,
-              batchNo: batch.batchNumber,
-              status: getBatchStatus(batch),
-              daysUntilExpiry: getDaysUntilExpiry(batch.expiryDate),
-          }
-      };
   }
 }

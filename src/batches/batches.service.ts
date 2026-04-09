@@ -117,14 +117,17 @@ export class BatchesService {
       })
     ]);
 
-    const enriched = batches.map(b => ({
-      ...b,
-      batchNo: b.batchNumber,
-      itemName: b.item.name,
-      sku: b.item.sku,
-      status: getBatchStatus(b),
-      daysUntilExpiry: getDaysUntilExpiry(b.expiryDate),
-    }));
+    const enriched = batches.map(b => {
+      const { item, ...rest } = b;
+      return {
+        ...rest,
+        batchNo: b.batchNumber,
+        itemName: item?.name,
+        sku: item?.sku,
+        status: getBatchStatus(b),
+        daysUntilExpiry: getDaysUntilExpiry(b.expiryDate),
+      };
+    });
 
     return {
       success: true,

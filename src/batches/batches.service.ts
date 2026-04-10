@@ -25,7 +25,7 @@ export class BatchesService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(BatchesService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   async getStatus(businessId: string) {
     const batches = await this.prisma.batch.findMany({

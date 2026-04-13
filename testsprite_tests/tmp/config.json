@@ -1,0 +1,20 @@
+{
+  "status": "commited",
+  "type": "backend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:8000",
+  "backendAuthType": "Bearer token",
+  "backendCredential": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbW53c3B2NDIwMDAzNzVmYjQzYnl6ZWN1IiwicGhvbmUiOiIrODgwMTIzNDU2Nzg5MCIsInVzZXJuYW1lIjoiSm9obiBEb2UiLCJyb2xlIjoib3duZXIiLCJidXNpbmVzc0lkIjoiY21ud3NwdjNuMDAwMDc1ZmJjeXN1cnFnZCIsImlhdCI6MTc3NjA2MDc4MSwiZXhwIjoxNzc2NjY1NTgxfQ.U_0yVv3M2FSPttZToX9y_dean6QvEaHqVvHugHQM1Xg",
+  "executionArgs": {
+    "projectName": "voiceERP",
+    "projectPath": "/home/mamun/Documents/voiceERP",
+    "testIds": [],
+    "additionalInstruction": "",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-kT6-vaLakD2J7ljGpmoCWCF17LFGtWojdJF9iaP8k_PCoYZIP9aoKCB-Xxho9Hz16vLhUEDEHaoNPiI5DWXXM61Oo1oqJmrxpQ1HPNcr83zlhpFvjoL3BuBQ5ZQ1T7YT7Dk"
+    }
+  },
+  "serverPort": 35083,
+  "proxy": "http://66e526f6-495f-4eb7-894c-14686305622a:Bo7Qrfd2cJZ9MvZkVN8pZ35thP6CH66H@tun.testsprite.com:8080"
+}

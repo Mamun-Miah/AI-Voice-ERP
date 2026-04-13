@@ -8,7 +8,18 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  NotFoundException,
+  StreamableFile,
+  Res,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { createReadStream, existsSync } from 'fs';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -105,6 +116,49 @@ export class ExpensesController {
   @ApiResponse({ status: 404, description: 'Expense not found' })
   remove(@GetUser() user: JwtUser, @Param('id') id: string) {
     return this.expensesService.remove(user.businessId, user.branchId, id);
+  }
+
+  // ── File Upload routes ──────────────────────────────────────────────────────
+
+  @Post('upload')
+  @ApiOperation({ summary: 'Upload an expense receipt/file (Max 5MB)' })
+  @ApiResponse({ status: 201, description: 'File uploaded successfully' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/expenses',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          cb(null, `${uniqueSuffix}${ext}`);
+        },
+      }),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB limit
+      },
+    }),
+  )
+  uploadFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('File is required or exceeds 5MB size limit');
+    }
+    return {
+      url: `/api/expenses/file/${file.filename}`,
+    };
+  }
+
+  @Get('file/:filename')
+  @ApiOperation({ summary: 'Securely view an uploaded expense file' })
+  getFile(
+    @Param('filename') filename: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const filePath = join(process.cwd(), 'uploads', 'expenses', filename);
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('File not found');
+    }
+    const fileStream = createReadStream(filePath);
+    return new StreamableFile(fileStream);
   }
 
   // ── Category routes ─────────────────────────────────────────────────────────

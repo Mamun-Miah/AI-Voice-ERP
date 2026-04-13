@@ -42,7 +42,7 @@ export class PurchasesService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(PurchasesService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   private async generatePurchaseNo(
     tx: Prisma.TransactionClient,
@@ -136,7 +136,7 @@ export class PurchasesService {
 
     const purchase = await this.prisma.$transaction(async (tx) => {
       const generatedGrnNo = await this.generatePurchaseNo(tx, businessId);
-      
+
       const purchaseItemsData: any[] = [];
       let subtotal = 0;
 
@@ -216,10 +216,10 @@ export class PurchasesService {
 
         await tx.item.update({
           where: { id: itemData.itemId },
-          data: { 
-            currentStock: newStock, 
+          data: {
+            currentStock: newStock,
             costPrice: itemData.unitCost, // update item cost price
-            lastPurchaseDate: new Date() 
+            lastPurchaseDate: new Date()
           },
         });
 
@@ -267,12 +267,12 @@ export class PurchasesService {
       // Handle immediate payments
       if (paidAmount > 0) {
         const accountMeta = ACCOUNT_TYPE_MAP[paymentMethod] ?? ACCOUNT_TYPE_MAP['cash'];
-        
+
         // Find existing account or create one
-        let account = accountId 
+        let account = accountId
           ? await tx.account.findUnique({ where: { id: accountId } })
           : await tx.account.findFirst({ where: { businessId, branchId, type: accountMeta.type } });
-        
+
         if (!account) {
           account = await tx.account.create({
             data: {
@@ -344,7 +344,7 @@ export class PurchasesService {
           if (!item) continue;
 
           const restoredStock = item.currentStock - purchaseItem.quantity;
-          
+
           await tx.item.update({
             where: { id: purchaseItem.itemId },
             data: { currentStock: restoredStock >= 0 ? restoredStock : 0 },
@@ -373,7 +373,7 @@ export class PurchasesService {
           });
         }
 
-        // Reverse party ledger
+        // Reverse party ledger 
         if (existing.supplierId && existing.dueAmount > 0) {
           const party = await tx.party.findUnique({ where: { id: existing.supplierId } });
           if (party) {

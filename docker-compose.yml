@@ -23,6 +23,20 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  prisma-studio:
+    image: node:20-alpine
+    container_name: prisma_studio
+    working_dir: /app
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    env_file:
+      - .env
+    command: sh -c "npm install && npx prisma generate && npx prisma studio --port 5555 --browser none"
+    ports:
+      - "5555:5555"
+
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin

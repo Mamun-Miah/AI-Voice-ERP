@@ -1,0 +1,47 @@
+[
+  {
+    "id": "TC001",
+    "title": "postapiauthloginwithvalidcredentials",
+    "description": "Verify that POST /api/auth/login with valid username and password returns HTTP 200 and a JWT token in the response body."
+  },
+  {
+    "id": "TC002",
+    "title": "postapiauthloginwithinvalidcredentials",
+    "description": "Verify that POST /api/auth/login with invalid credentials returns HTTP 401 with an authentication error message."
+  },
+  {
+    "id": "TC003",
+    "title": "getapipurchaseswithauthorization",
+    "description": "Verify that GET /api/purchases with a valid Authorization Bearer token returns HTTP 200 with a list of purchases."
+  },
+  {
+    "id": "TC004",
+    "title": "postapipurchaseswithvalidpayload",
+    "description": "Verify that POST /api/purchases with a valid Authorization Bearer token and valid purchase payload creates a new purchase, returns HTTP 201 with the created purchase record, and updates inventory quantities accordingly."
+  },
+  {
+    "id": "TC005",
+    "title": "postapipurchaseswithinvalidpayload",
+    "description": "Verify that POST /api/purchases with a valid Authorization Bearer token but invalid payload (missing required fields) returns HTTP 400 with validation error details."
+  },
+  {
+    "id": "TC006",
+    "title": "getapisaleswithauthorization",
+    "description": "Verify that GET /api/sales with a valid Authorization Bearer token returns HTTP 200 with a list of sales."
+  },
+  {
+    "id": "TC007",
+    "title": "postapisaleswithvalidpayload",
+    "description": "Verify that POST /api/sales with a valid Authorization Bearer token and valid sale payload (quantities within available stock) creates a new sale, returns HTTP 201 with the created sale record, and decreases inventory quantities accordingly."
+  },
+  {
+    "id": "TC008",
+    "title": "postapisaleswithinsufficientstock",
+    "description": "Verify that POST /api/sales with a valid Authorization Bearer token but sale payload requesting quantities exceeding available stock returns HTTP 400 with an insufficient stock error."
+  },
+  {
+    "id": "TC009",
+    "title": "getapiitemswithauthorization",
+    "description": "Verify that GET /api/items with a valid Authorization Bearer token returns HTTP 200 with a list of items and their current quantities."
+  }
+]

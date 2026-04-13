@@ -1,0 +1,58 @@
+version: "2"
+type: backend
+tech_stack:
+  - TypeScript
+  - NestJS
+  - NodeJS
+  - Prisma
+  - PostgreSQL
+features:
+  - name: Purchases API
+    description: Purchases and Purchase Returns management
+    files:
+      - src/purchases/purchases.controller.ts
+      - src/purchases/purchases.service.ts
+    endpoints:
+      - method: GET
+        path: /api/purchases
+        description: List all purchases
+        auth_required: true
+      - method: POST
+        path: /api/purchases
+        description: Create a new purchase
+        auth_required: true
+  - name: Sales API
+    description: Sales management
+    files:
+      - src/sales/sales.controller.ts
+      - src/sales/sales.service.ts
+    endpoints:
+      - method: GET
+        path: /api/sales
+        description: List all sales
+        auth_required: true
+      - method: POST
+        path: /api/sales
+        description: Create a new sale
+        auth_required: true
+  - name: Inventory & Items API
+    description: Inventory status and Items management
+    files:
+      - src/items/items.controller.ts
+      - src/items/items.service.ts
+    endpoints:
+      - method: GET
+        path: /api/items
+        description: List items
+        auth_required: true
+  - name: Auth API
+    description: Authentication
+    files:
+      - src/auth/auth.controller.ts
+      - src/auth/auth.service.ts
+    endpoints:
+      - method: POST
+        path: /api/auth/login
+        description: Login user
+        auth_required: false
+known_limitations: []

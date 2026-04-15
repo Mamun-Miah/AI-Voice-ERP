@@ -59,11 +59,14 @@ model Business {
   trialEndsAt           DateTime?
   isActive              Boolean   @default(true)
   accountingLockedUntil DateTime?
-  invoicePrefix         String    @default("INV")
-  invoiceFooter         String?
-  invoicePaperSize      String    @default("A4")
-  invoiceLanguage       String    @default("bn")
-  createdAt             DateTime  @default(now())
+  invoicePrefix                 String    @default("INV")
+  invoiceFooter                 String?
+  invoicePaperSize              String    @default("A4")
+  invoiceLanguage               String    @default("bn")
+  lowStockThreshold             Int       @default(10)
+  lowStockAlerts                Boolean   @default(true)
+  stockWarningNotifications     Boolean   @default(true)
+  createdAt                     DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   deletedAt             DateTime?
 

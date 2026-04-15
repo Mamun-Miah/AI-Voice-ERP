@@ -1,3 +1,4 @@
+import { SettingsModule } from './settings/settings.module';
 import { PartiesModule } from './parties/parties.module';
 import { PartiesService } from './parties/parties.service';
 import { QuotationsModule } from './quotations/quotations.module';
@@ -26,6 +27,7 @@ import { ExpensesController } from './expenses/expenses.controller';
 import { ExpensesService } from './expenses/expenses.service';
 @Module({
   imports: [
+    SettingsModule,
     PartiesModule,
     QuotationsModule,
     ExpensesModule,

@@ -268,6 +268,7 @@ export class ItemsService {
           }
           createdItems.push(item);
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return createdItems;
       },
       { timeout: 10000 },

@@ -41,7 +41,7 @@ import type { JwtUser } from 'src/auth/types/jwt-user.type';
 @UseGuards(JwtAuthGuard)
 @Controller('expenses')
 export class ExpensesController {
-  constructor(private readonly expensesService: ExpensesService) {}
+  constructor(private readonly expensesService: ExpensesService) { }
 
   // ── Expense routes ──────────────────────────────────────────────────────────
 
@@ -64,6 +64,75 @@ export class ExpensesController {
   findAll(@GetUser() user: JwtUser, @Query() query: QueryExpenseDto) {
     return this.expensesService.findAll(user.businessId, user.branchId, query);
   }
+
+  // ── Category routes ─────────────────────────────────────────────────────────
+
+  // GET /expenses/categories
+  @Get('categories')
+  @ApiOperation({
+    summary: 'List expense categories',
+    description:
+      'Returns business-specific categories + global templates, each with expense count.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Categories retrieved successfully',
+  })
+  findAllCategories() {
+    return this.expensesService.findAllCategories();
+  }
+
+  // GET /expenses/categories/:id
+  @Get('categories/:id')
+  @ApiOperation({ summary: 'Get a single expense category' })
+  @ApiResponse({ status: 200, description: 'Category retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  findOneCategory(@GetUser() user: JwtUser, @Param('id') id: string) {
+    return this.expensesService.findOneCategory(user.businessId, id);
+  }
+
+  // POST /expenses/categories
+  @Post('categories')
+  @ApiOperation({ summary: 'Create a new expense category' })
+  @ApiResponse({ status: 201, description: 'Category created successfully' })
+  @ApiResponse({ status: 409, description: 'Category name already exists' })
+  createCategory(
+    @GetUser() user: JwtUser,
+    @Body() dto: CreateExpenseCategoryDto,
+  ) {
+    return this.expensesService.createCategory(user.businessId, dto);
+  }
+
+  // PATCH /expenses/categories/:id
+  @Patch('categories/:id')
+  @ApiOperation({ summary: 'Update an expense category' })
+  @ApiResponse({ status: 200, description: 'Category updated successfully' })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  @ApiResponse({ status: 409, description: 'Category name already exists' })
+  updateCategory(
+    @GetUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateExpenseCategoryDto,
+  ) {
+    return this.expensesService.updateCategory(user.businessId, id, dto);
+  }
+
+  // DELETE /expenses/categories/:id
+  @Delete('categories/:id')
+  @ApiOperation({
+    summary: 'Delete an expense category',
+    description: 'Blocked if any expenses are still using this category.',
+  })
+  @ApiResponse({ status: 200, description: 'Category deleted successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Category is in use by existing expenses',
+  })
+  @ApiResponse({ status: 404, description: 'Category not found' })
+  removeCategory(@GetUser() user: JwtUser, @Param('id') id: string) {
+    return this.expensesService.removeCategory(user.businessId, id);
+  }
+
 
   // GET /expenses/:id
   @Get(':id')
@@ -161,74 +230,4 @@ export class ExpensesController {
     return new StreamableFile(fileStream);
   }
 
-  // ── Category routes ─────────────────────────────────────────────────────────
-
-  // GET /expenses/categories
-  @Get('categories')
-  @ApiOperation({
-    summary: 'List expense categories',
-    description:
-      'Returns business-specific categories + global templates, each with expense count.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Categories retrieved successfully',
-  })
-  findAllCategories(@GetUser() user: JwtUser) {
-    return this.expensesService.findAllCategories(
-      user.businessId,
-      user.branchId,
-    );
-  }
-
-  // GET /expenses/categories/:id
-  @Get('categories/:id')
-  @ApiOperation({ summary: 'Get a single expense category' })
-  @ApiResponse({ status: 200, description: 'Category retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Category not found' })
-  findOneCategory(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.expensesService.findOneCategory(user.businessId, id);
-  }
-
-  // POST /expenses/categories
-  @Post('categories')
-  @ApiOperation({ summary: 'Create a new expense category' })
-  @ApiResponse({ status: 201, description: 'Category created successfully' })
-  @ApiResponse({ status: 409, description: 'Category name already exists' })
-  createCategory(
-    @GetUser() user: JwtUser,
-    @Body() dto: CreateExpenseCategoryDto,
-  ) {
-    return this.expensesService.createCategory(user.businessId, dto);
-  }
-
-  // PATCH /expenses/categories/:id
-  @Patch('categories/:id')
-  @ApiOperation({ summary: 'Update an expense category' })
-  @ApiResponse({ status: 200, description: 'Category updated successfully' })
-  @ApiResponse({ status: 404, description: 'Category not found' })
-  @ApiResponse({ status: 409, description: 'Category name already exists' })
-  updateCategory(
-    @GetUser() user: JwtUser,
-    @Param('id') id: string,
-    @Body() dto: UpdateExpenseCategoryDto,
-  ) {
-    return this.expensesService.updateCategory(user.businessId, id, dto);
-  }
-
-  // DELETE /expenses/categories/:id
-  @Delete('categories/:id')
-  @ApiOperation({
-    summary: 'Delete an expense category',
-    description: 'Blocked if any expenses are still using this category.',
-  })
-  @ApiResponse({ status: 200, description: 'Category deleted successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Category is in use by existing expenses',
-  })
-  @ApiResponse({ status: 404, description: 'Category not found' })
-  removeCategory(@GetUser() user: JwtUser, @Param('id') id: string) {
-    return this.expensesService.removeCategory(user.businessId, id);
-  }
 }

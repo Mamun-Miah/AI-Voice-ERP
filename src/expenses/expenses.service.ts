@@ -91,7 +91,7 @@ export class ExpensesService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(ExpensesService.name)
     private readonly logger: PinoLogger,
-  ) {}
+  ) { }
 
   // ══════════════════════════════════════════════════════════════════════════
   // EXPENSES
@@ -461,23 +461,11 @@ export class ExpensesService {
 
   // ─── LIST CATEGORIES ───────────────────────────────────────────────────────
   // Returns business-specific categories + global templates (businessId = null)
-  async findAllCategories(businessId: string, branchId: string) {
+  async findAllCategories() {
     const categories = await this.prisma.expenseCategory.findMany({
-      where: { OR: [{ businessId }, { businessId: null }] },
       orderBy: { name: 'asc' },
     });
-
-    // Attach expense count per category (scoped to this business)
-    const withCount = await Promise.all(
-      categories.map(async (cat) => {
-        const expenseCount = await this.prisma.expense.count({
-          where: { categoryId: cat.id, businessId, branchId },
-        });
-        return { ...cat, expenseCount };
-      }),
-    );
-
-    return { success: true, data: withCount };
+    return { success: true, data: categories };
   }
 
   // ─── GET ONE CATEGORY ──────────────────────────────────────────────────────

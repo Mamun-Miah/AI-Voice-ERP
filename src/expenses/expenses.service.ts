@@ -112,6 +112,17 @@ export class ExpensesService {
       if (query.endDate) where.date.lte = new Date(query.endDate);
     }
 
+    if (query.search) {
+      where.OR = [
+        { description: { contains: query.search, mode: 'insensitive' } },
+        {
+          category: {
+            name: { contains: query.search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
+
     const [expenses, total, totals] = await Promise.all([
       this.prisma.expense.findMany({
         where,

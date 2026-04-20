@@ -31,4 +31,9 @@ export class QueryExpenseDto {
   @IsOptional()
   @IsNumberString()
   limit?: string = '50';
+
+  @ApiPropertyOptional({ description: 'Search term for description or category name' })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

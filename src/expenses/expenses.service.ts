@@ -97,7 +97,6 @@ export class ExpensesService {
   // EXPENSES
   // ══════════════════════════════════════════════════════════════════════════
 
-  // ─── LIST ──────────────────────────────────────────────────────────────────
   async findAll(businessId: string, branchId: string, query: QueryExpenseDto) {
     const page = parseInt(query.page ?? '1', 10);
     const limit = parseInt(query.limit ?? '50', 10);

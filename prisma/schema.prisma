@@ -98,14 +98,18 @@ model Business {
   purchaseReturns    PurchaseReturn[]
   quotations         Quotation[]
   roles              Role[]
-  sales              Sale[]
-  saleReturns        SaleReturn[]
-  stockLedger        StockLedger[]
-  subscriptions      Subscription[]
-  supportTickets     SupportTicket[]
-  units              Unit[]
-  usageRecords       UsageRecord[]
-  users              User[]
+  sales                Sale[]
+  saleReturns          SaleReturn[]
+  stockLedger          StockLedger[]
+  subscriptions        Subscription[]
+  supportTickets       SupportTicket[]
+  units                Unit[]
+  usageRecords         UsageRecord[]
+  users                User[]
+  paymentAllocations   PaymentAllocation[]
+  collectionReminders  CollectionReminder[]
+  promiseToPays        PromiseToPay[]
+  followUpNotes        FollowUpNote[]
 
   @@index([deletedAt])
 }
@@ -292,11 +296,14 @@ model Party {
   business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   branch       Branch?        @relation(fields: [branchId], references: [id])
   category     PartyCategory? @relation(fields: [categoryId], references: [id])
-  partyLedger  PartyLedger[]
-  payments     Payment[]
-  paymentPlans PaymentPlan[]
-  purchases    Purchase[]
-  sales        Sale[]
+  partyLedger         PartyLedger[]
+  payments            Payment[]
+  paymentPlans        PaymentPlan[]
+  purchases           Purchase[]
+  sales               Sale[]
+  collectionReminders CollectionReminder[]
+  promiseToPays       PromiseToPay[]
+  followUpNotes       FollowUpNote[]
 
   @@index([businessId])
   @@index([branchId])
@@ -1157,6 +1164,107 @@ model SupportMessage {
   ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+// ─── Payments & Collections ───────────────────────────────────────────────────
+
+/// Tracks which sale/purchase invoices a payment is allocated to
+model PaymentAllocation {
+  id          String    @id @default(cuid())
+  businessId  String
+  paymentId   String
+  saleId      String?
+  purchaseId  String?
+  amount      Float
+  notes       String?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([paymentId])
+  @@index([saleId])
+  @@index([purchaseId])
+  @@index([deletedAt])
+}
+
+/// Scheduled customer reminder events (overdue, upcoming, etc.)
+model CollectionReminder {
+  id            String    @id @default(cuid())
+  businessId    String
+  branchId      String?
+  partyId       String
+  type          String    @default("overdue")   // overdue | upcoming | custom
+  channel       String    @default("manual")    // manual | sms | whatsapp | email
+  scheduledAt   DateTime
+  sentAt        DateTime?
+  status        String    @default("pending")   // pending | sent | failed | cancelled
+  message       String?
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  party    Party    @relation(fields: [partyId], references: [id])
+
+  @@index([businessId])
+  @@index([partyId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// Customer promise-to-pay commitments for collection tracking
+model PromiseToPay {
+  id           String    @id @default(cuid())
+  businessId   String
+  branchId     String?
+  partyId      String
+  saleId       String?
+  promisedDate DateTime
+  amount       Float
+  status       String    @default("pending")  // pending | kept | broken | partial
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  party    Party    @relation(fields: [partyId], references: [id])
+
+  @@index([businessId])
+  @@index([partyId])
+  @@index([promisedDate])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+/// Collection agent follow-up notes for overdue customers
+model FollowUpNote {
+  id         String    @id @default(cuid())
+  businessId String
+  branchId   String?
+  partyId    String
+  saleId     String?
+  note       String
+  outcome    String?   // contacted | no_answer | promised | refused | paid
+  nextFollowUp DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  party    Party    @relation(fields: [partyId], references: [id])
+
+  @@index([businessId])
+  @@index([partyId])
   @@index([createdAt])
   @@index([deletedAt])
 }

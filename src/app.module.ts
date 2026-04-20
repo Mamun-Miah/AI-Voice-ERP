@@ -11,6 +11,7 @@ import { ItemsController } from './items/items.controller';
 import { ItemsService } from './items/items.service';
 import { BatchesModule } from './batches/batches.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { PaymentsModule } from './payments/payments.module';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -35,6 +36,7 @@ import { ExpensesService } from './expenses/expenses.service';
     ItemsModule,
     BatchesModule,
     PurchasesModule,
+    PaymentsModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,

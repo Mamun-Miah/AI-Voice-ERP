@@ -48,7 +48,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // 9. Swagger — must be after setGlobalPrefix
+  // 9. Swagger 
   const config = new DocumentBuilder()
     .setTitle('Hello Khata API Documentation')
     .setDescription('The Hello Khata API documentation')

@@ -44,7 +44,7 @@ export class SaleReturnsService {
     private readonly prisma: PrismaService,
     @InjectPinoLogger(SaleReturnsService.name)
     private readonly logger: PinoLogger,
-  ) { }
+  ) {}
 
   async findAll(
     businessId: string,
@@ -59,7 +59,8 @@ export class SaleReturnsService {
     if (query.saleId) where.saleId = query.saleId;
     if (query.partyId) where.partyId = query.partyId;
     if (query.status) where.status = query.status;
-    if (query.reason) where.reason = { contains: query.reason, mode: 'insensitive' };
+    if (query.reason)
+      where.reason = { contains: query.reason, mode: 'insensitive' };
 
     if (query.startDate || query.endDate) {
       where.createdAt = {};
@@ -74,7 +75,9 @@ export class SaleReturnsService {
     if (query.search) {
       where.OR = [
         { returnNo: { contains: query.search, mode: 'insensitive' } },
-        { sale: { invoiceNo: { contains: query.search, mode: 'insensitive' } } },
+        {
+          sale: { invoiceNo: { contains: query.search, mode: 'insensitive' } },
+        },
       ];
     }
 
@@ -123,7 +126,9 @@ export class SaleReturnsService {
     if (!sale) throw new NotFoundException('Original sale not found.');
 
     if (sale.status === 'cancelled') {
-      throw new BadRequestException('Cannot process return for a cancelled sale.');
+      throw new BadRequestException(
+        'Cannot process return for a cancelled sale.',
+      );
     }
 
     const saleItemMap = new Map<string, (typeof sale.items)[0]>(
@@ -136,7 +141,9 @@ export class SaleReturnsService {
     for (const input of items) {
       const saleItem = saleItemMap.get(input.saleItemId);
       if (!saleItem) {
-        throw new BadRequestException(`Sale item ${input.saleItemId} not found in this sale.`);
+        throw new BadRequestException(
+          `Sale item ${input.saleItemId} not found in this sale.`,
+        );
       }
 
       const maxReturnable = saleItem.quantity - saleItem.returnedQty;
@@ -148,7 +155,8 @@ export class SaleReturnsService {
 
       const ratio = input.quantity / saleItem.quantity;
       const proportionedDiscount = saleItem.discount * ratio;
-      const returnTotal = input.quantity * saleItem.unitPrice - proportionedDiscount;
+      const returnTotal =
+        input.quantity * saleItem.unitPrice - proportionedDiscount;
 
       returnItemsData.push({
         saleItemId: saleItem.id,
@@ -181,14 +189,17 @@ export class SaleReturnsService {
           discount: 0,
           tax: 0,
           total: refundSubtotal,
-          refundAmount: refundMethod && refundMethod !== RefundMethod.CREDIT_NOTE ? refundSubtotal : 0,
+          refundAmount:
+            refundMethod && refundMethod !== RefundMethod.CREDIT_NOTE
+              ? refundSubtotal
+              : 0,
           refundMethod: refundMethod ?? null,
           status: 'completed',
           reason,
           notes,
           createdBy: userId,
           items: {
-            create: returnItemsData.map(item => ({
+            create: returnItemsData.map((item) => ({
               saleItemId: item.saleItemId,
               itemId: item.itemId,
               itemName: item.itemName,
@@ -198,33 +209,35 @@ export class SaleReturnsService {
               discount: item.discount,
               total: item.total,
               reason: item.reason,
-            }))
-          }
+            })),
+          },
         },
-        include: singleReturnInclude
+        include: singleReturnInclude,
       });
 
       for (const item of returnItemsData) {
         // Update SaleItem.returnedQty
         await tx.saleItem.update({
           where: { id: item.saleItemId },
-          data: { returnedQty: { increment: item.quantity } }
+          data: { returnedQty: { increment: item.quantity } },
         });
 
         // Restore Stock
-        const currentItem = await tx.item.findUnique({ where: { id: item.itemId } });
+        const currentItem = await tx.item.findUnique({
+          where: { id: item.itemId },
+        });
         if (currentItem) {
           const restoredStock = currentItem.currentStock + item.quantity;
           await tx.item.update({
             where: { id: item.itemId },
-            data: { currentStock: restoredStock }
+            data: { currentStock: restoredStock },
           });
 
           // Adjust Batch
           if (item.batchId) {
             await tx.batch.update({
               where: { id: item.batchId },
-              data: { remainingQty: { increment: item.quantity } }
+              data: { remainingQty: { increment: item.quantity } },
             });
           }
 
@@ -242,35 +255,47 @@ export class SaleReturnsService {
               referenceType: 'sale_return',
               reason: item.reason ?? 'Sales Return',
               createdBy: userId,
-            }
+            },
           });
         }
       }
 
       // Reconcile overall sale profit? The architecture doc says "Update Sale profit".
-      const updatedSaleItems = await tx.saleItem.findMany({ where: { saleId: sale.id } });
+      const updatedSaleItems = await tx.saleItem.findMany({
+        where: { saleId: sale.id },
+      });
       const currentProfit = updatedSaleItems.reduce((acc, si) => {
         const effectiveQty = si.quantity - si.returnedQty;
         const profitPerUnit = si.unitPrice - si.costPrice;
         const discountRatio = effectiveQty / si.quantity;
-        return acc + (profitPerUnit * effectiveQty) - (si.discount * (isNaN(discountRatio) ? 0 : discountRatio));
+        return (
+          acc +
+          profitPerUnit * effectiveQty -
+          si.discount * (isNaN(discountRatio) ? 0 : discountRatio)
+        );
       }, 0);
 
       // Check if fully returned
-      const allReturned = updatedSaleItems.every(si => si.quantity === si.returnedQty);
+      const allReturned = updatedSaleItems.every(
+        (si) => si.quantity === si.returnedQty,
+      );
 
       await tx.sale.update({
         where: { id: sale.id },
         data: {
           profit: currentProfit,
-          status: allReturned ? 'returned' : sale.status
-        }
+          status: allReturned ? 'returned' : sale.status,
+        },
       });
 
-      if (refundMethod && accountId && refundMethod !== RefundMethod.CREDIT_NOTE) {
+      if (
+        refundMethod &&
+        accountId &&
+        refundMethod !== RefundMethod.CREDIT_NOTE
+      ) {
         await tx.account.update({
           where: { id: accountId },
-          data: { currentBalance: { decrement: refundSubtotal } }
+          data: { currentBalance: { decrement: refundSubtotal } },
         });
 
         // Record a permanent payment entry for the refund
@@ -293,12 +318,14 @@ export class SaleReturnsService {
       // If they had outstanding balance, we could credit their party account.
       if (sale.partyId) {
         if (refundMethod === RefundMethod.CREDIT_NOTE || sale.dueAmount > 0) {
-          const party = await tx.party.findUnique({ where: { id: sale.partyId } });
+          const party = await tx.party.findUnique({
+            where: { id: sale.partyId },
+          });
           if (party) {
             const newBalance = party.currentBalance - refundSubtotal;
             await tx.party.update({
               where: { id: party.id },
-              data: { currentBalance: newBalance }
+              data: { currentBalance: newBalance },
             });
 
             await tx.partyLedger.create({
@@ -311,8 +338,8 @@ export class SaleReturnsService {
                 amount: -refundSubtotal,
                 balance: newBalance,
                 description: `Sales Return SR-${returnNo}`,
-                date: new Date()
-              }
+                date: new Date(),
+              },
             });
           }
         }
@@ -321,7 +348,10 @@ export class SaleReturnsService {
       return newReturn;
     });
 
-    this.logger.info({ returnId: saleReturn.id, saleId }, 'Sale return processed');
+    this.logger.info(
+      { returnId: saleReturn.id, saleId },
+      'Sale return processed',
+    );
 
     return { success: true, data: saleReturn };
   }
@@ -352,7 +382,7 @@ export class SaleReturnsService {
   async remove(businessId: string, branchId: string, id: string) {
     const existing = await this.prisma.saleReturn.findFirst({
       where: { id, businessId, branchId },
-      include: { items: true }
+      include: { items: true },
     });
 
     if (!existing) throw new NotFoundException(`Return ${id} not found.`);
@@ -367,25 +397,29 @@ export class SaleReturnsService {
         // Restore returnedQty
         await tx.saleItem.update({
           where: { id: item.saleItemId },
-          data: { returnedQty: { decrement: item.quantity } }
+          data: { returnedQty: { decrement: item.quantity } },
         });
 
         // Deduct stock (since it was added during return)
-        const currentItem = await tx.item.findUnique({ where: { id: item.itemId } });
+        const currentItem = await tx.item.findUnique({
+          where: { id: item.itemId },
+        });
         if (currentItem) {
           const reversedStock = currentItem.currentStock - item.quantity;
           await tx.item.update({
             where: { id: item.itemId },
-            data: { currentStock: reversedStock }
+            data: { currentStock: reversedStock },
           });
 
           // we do not have batchId in saleReturnItem? The schema doesn't have it natively.
-          // It relies on saleItem. 
-          const originalSaleItem = await tx.saleItem.findUnique({ where: { id: item.saleItemId } });
+          // It relies on saleItem.
+          const originalSaleItem = await tx.saleItem.findUnique({
+            where: { id: item.saleItemId },
+          });
           if (originalSaleItem?.batchId) {
             await tx.batch.update({
               where: { id: originalSaleItem.batchId },
-              data: { remainingQty: { decrement: item.quantity } }
+              data: { remainingQty: { decrement: item.quantity } },
             });
           }
 
@@ -399,15 +433,15 @@ export class SaleReturnsService {
               newStock: reversedStock,
               referenceId: existing.id,
               referenceType: 'sale_return_reversal',
-              reason: 'Sale return reversed'
-            }
+              reason: 'Sale return reversed',
+            },
           });
         }
       }
 
       await tx.saleReturn.update({
         where: { id },
-        data: { status: 'cancelled', deletedAt: new Date() }
+        data: { status: 'cancelled', deletedAt: new Date() },
       });
     });
 

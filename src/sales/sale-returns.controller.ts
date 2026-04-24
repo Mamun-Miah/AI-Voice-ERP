@@ -46,7 +46,10 @@ export class SaleReturnsController {
   @Post()
   @ApiOperation({ summary: 'Create a new sale return' })
   @ApiResponse({ status: 201, description: 'Sale return processed' })
-  @ApiResponse({ status: 400, description: 'Validation error (quantity limit)' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error (quantity limit)',
+  })
   create(@GetUser() user: JwtUser, @Body() dto: CreateSaleReturnDto) {
     return this.returnsService.create(
       user.businessId,

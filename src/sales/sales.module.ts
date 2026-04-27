@@ -5,7 +5,7 @@ import { SaleReturnsService } from './sale-returns.service';
 import { SaleReturnsController } from './sale-returns.controller';
 
 @Module({
-  controllers: [SalesController, SaleReturnsController],
+  controllers: [SaleReturnsController, SalesController],
   providers: [SalesService, SaleReturnsService],
   exports: [SalesService, SaleReturnsService],
 })

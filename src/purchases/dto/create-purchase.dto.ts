@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PurchaseItemInputDto } from './purchase-input.dto';
+import { string } from 'joi';
 
 export enum PurchasePaymentMethod {
   CASH = 'cash',
@@ -54,6 +55,11 @@ export class CreatePurchaseDto {
   @IsNumber()
   @Min(0)
   tax?: number;
+
+  @ApiPropertyOptional({ example: "pending | partial | received | cancelled" })
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @ApiPropertyOptional({ example: 1000 })
   @IsOptional()

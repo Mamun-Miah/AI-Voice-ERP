@@ -51,10 +51,7 @@ export class PurchasesService {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const prefix = `PUR-${dateStr}-`;
     const last = await tx.purchase.findFirst({
-      where: { businessId, id: { startsWith: prefix } }, // wait, invoiceNo or generic PUR number? We'll use ID or a purchase number
-      // But we just don't have purchaseNo in schema, we have invoiceNo. So let's store it in invoiceNo if it's missing, or maybe generate grnNo?
-      // Architecture says: Generate purchase number (PUR-YYYYMMDD-XXXX)
-      // I'll put it in grnNo
+      where: { businessId, id: { startsWith: prefix } },
       orderBy: { grnNo: 'desc' },
     });
     const next = last && last.grnNo ? parseInt(last.grnNo.slice(-4), 10) + 1 : 1;

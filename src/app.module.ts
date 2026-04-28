@@ -1,14 +1,8 @@
 import { SettingsModule } from './settings/settings.module';
 import { PartiesModule } from './parties/parties.module';
-import { PartiesService } from './parties/parties.service';
 import { QuotationsModule } from './quotations/quotations.module';
-import { QuotationsService } from './quotations/quotations.service';
 import { SalesModule } from './sales/sales.module';
-import { SalesController } from './sales/sales.controller';
-import { SalesService } from './sales/sales.service';
 import { ItemsModule } from './items/items.module';
-import { ItemsController } from './items/items.controller';
-import { ItemsService } from './items/items.service';
 import { BatchesModule } from './batches/batches.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -24,8 +18,6 @@ import { LoggerModule } from 'nestjs-pino/LoggerModule';
 import { MailModule } from './mail/mail.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ExpensesModule } from './expenses/expenses.module';
-import { ExpensesController } from './expenses/expenses.controller';
-import { ExpensesService } from './expenses/expenses.service';
 @Module({
   imports: [
     SettingsModule,
@@ -80,17 +72,9 @@ import { ExpensesService } from './expenses/expenses.service';
     MailModule,
   ],
   controllers: [
-    ExpensesController,
-    SalesController,
-    ItemsController,
     AppController,
   ],
   providers: [
-    PartiesService,
-    QuotationsService,
-    ExpensesService,
-    SalesService,
-    ItemsService,
     AppService,
     PrismaService,
   ],

@@ -41,75 +41,75 @@ model BusinessType {
 }
 
 model Business {
-  id                    String    @id @default(cuid())
-  name                  String
-  nameBn                String?
-  type                  String    @default("retail")
-  phone                 String?
-  email                 String?
-  address               String?
-  logo                  String?
-  currency              String    @default("BDT")
-  timezone              String    @default("Asia/Dhaka")
-  language              String    @default("bn")
-  plan                  String    @default("free")
-  planStatus            String    @default("active")
-  planStartDate         DateTime?
-  planEndDate           DateTime?
-  trialEndsAt           DateTime?
-  isActive              Boolean   @default(true)
-  accountingLockedUntil DateTime?
-  invoicePrefix                 String    @default("INV")
-  invoiceFooter                 String?
-  invoicePaperSize              String    @default("A4")
-  invoiceLanguage               String    @default("bn")
-  lowStockThreshold             Int       @default(10)
-  lowStockAlerts                Boolean   @default(true)
-  stockWarningNotifications     Boolean   @default(true)
-  createdAt                     DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  deletedAt             DateTime?
+  id                        String    @id @default(cuid())
+  name                      String
+  nameBn                    String?
+  type                      String    @default("retail")
+  phone                     String?
+  email                     String?
+  address                   String?
+  logo                      String?
+  currency                  String    @default("BDT")
+  timezone                  String    @default("Asia/Dhaka")
+  language                  String    @default("bn")
+  plan                      String    @default("free")
+  planStatus                String    @default("active")
+  planStartDate             DateTime?
+  planEndDate               DateTime?
+  trialEndsAt               DateTime?
+  isActive                  Boolean   @default(true)
+  accountingLockedUntil     DateTime?
+  invoicePrefix             String    @default("INV")
+  invoiceFooter             String?
+  invoicePaperSize          String    @default("A4")
+  invoiceLanguage           String    @default("bn")
+  lowStockThreshold         Int       @default(10)
+  lowStockAlerts            Boolean   @default(true)
+  stockWarningNotifications Boolean   @default(true)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
 
   // Relations
-  businessTypeId     String?
-  businessType       BusinessType?       @relation(fields: [businessTypeId], references: [id])
-  accounts           Account[]
-  accountTransfers   AccountTransfer[]
-  auditLogs          AuditLog[]
-  batches            Batch[]
-  branches           Branch[]
-  cashDrawerSessions CashDrawerSession[]
-  categories         Category[]
-  creditNotes        CreditNote[]
-  debitNotes         DebitNote[]
-  expenses           Expense[]
-  expenseCategories  ExpenseCategory[]
-  items              Item[]
-  itemVariants       ItemVariant[]
-  otps               Otp[]
-  parties            Party[]
-  partyCategories    PartyCategory[]
-  partyLedger        PartyLedger[]
-  payments           Payment[]
-  paymentPlans       PaymentPlan[]
-  periodLocks        PeriodLock[]
-  purchases          Purchase[]
-  purchaseOrders     PurchaseOrder[]
-  purchaseReturns    PurchaseReturn[]
-  quotations         Quotation[]
-  roles              Role[]
-  sales                Sale[]
-  saleReturns          SaleReturn[]
-  stockLedger          StockLedger[]
-  subscriptions        Subscription[]
-  supportTickets       SupportTicket[]
-  units                Unit[]
-  usageRecords         UsageRecord[]
-  users                User[]
-  paymentAllocations   PaymentAllocation[]
-  collectionReminders  CollectionReminder[]
-  promiseToPays        PromiseToPay[]
-  followUpNotes        FollowUpNote[]
+  businessTypeId      String?
+  businessType        BusinessType?        @relation(fields: [businessTypeId], references: [id])
+  accounts            Account[]
+  accountTransfers    AccountTransfer[]
+  auditLogs           AuditLog[]
+  batches             Batch[]
+  branches            Branch[]
+  cashDrawerSessions  CashDrawerSession[]
+  categories          Category[]
+  creditNotes         CreditNote[]
+  debitNotes          DebitNote[]
+  expenses            Expense[]
+  expenseCategories   ExpenseCategory[]
+  items               Item[]
+  itemVariants        ItemVariant[]
+  otps                Otp[]
+  parties             Party[]
+  partyCategories     PartyCategory[]
+  partyLedger         PartyLedger[]
+  payments            Payment[]
+  paymentPlans        PaymentPlan[]
+  periodLocks         PeriodLock[]
+  purchases           Purchase[]
+  purchaseOrders      PurchaseOrder[]
+  purchaseReturns     PurchaseReturn[]
+  quotations          Quotation[]
+  roles               Role[]
+  sales               Sale[]
+  saleReturns         SaleReturn[]
+  stockLedger         StockLedger[]
+  subscriptions       Subscription[]
+  supportTickets      SupportTicket[]
+  units               Unit[]
+  usageRecords        UsageRecord[]
+  users               User[]
+  paymentAllocations  PaymentAllocation[]
+  collectionReminders CollectionReminder[]
+  promiseToPays       PromiseToPay[]
+  followUpNotes       FollowUpNote[]
 
   @@index([deletedAt])
 }
@@ -161,7 +161,7 @@ model User {
   branchId        String?
   isActive        Boolean   @default(true)
   permissions     String?
-  password        String?
+  password        String
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
@@ -293,9 +293,9 @@ model Party {
   aliases         String?
   nameBn          String?
 
-  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  branch       Branch?        @relation(fields: [branchId], references: [id])
-  category     PartyCategory? @relation(fields: [categoryId], references: [id])
+  business            Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  branch              Branch?              @relation(fields: [branchId], references: [id])
+  category            PartyCategory?       @relation(fields: [categoryId], references: [id])
   partyLedger         PartyLedger[]
   payments            Payment[]
   paymentPlans        PaymentPlan[]
@@ -809,7 +809,7 @@ model Payment {
   deletedAt     DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  party    Party?    @relation(fields: [partyId], references: [id])
+  party    Party?   @relation(fields: [partyId], references: [id])
   sale     Sale?    @relation(fields: [saleId], references: [id])
 
   @@index([businessId])
@@ -1172,15 +1172,15 @@ model SupportMessage {
 
 /// Tracks which sale/purchase invoices a payment is allocated to
 model PaymentAllocation {
-  id          String    @id @default(cuid())
-  businessId  String
-  paymentId   String
-  saleId      String?
-  purchaseId  String?
-  amount      Float
-  notes       String?
-  createdAt   DateTime  @default(now())
-  deletedAt   DateTime?
+  id         String    @id @default(cuid())
+  businessId String
+  paymentId  String
+  saleId     String?
+  purchaseId String?
+  amount     Float
+  notes      String?
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
@@ -1193,21 +1193,21 @@ model PaymentAllocation {
 
 /// Scheduled customer reminder events (overdue, upcoming, etc.)
 model CollectionReminder {
-  id            String    @id @default(cuid())
-  businessId    String
-  branchId      String?
-  partyId       String
-  type          String    @default("overdue")   // overdue | upcoming | custom
-  channel       String    @default("manual")    // manual | sms | whatsapp | email
-  scheduledAt   DateTime
-  sentAt        DateTime?
-  status        String    @default("pending")   // pending | sent | failed | cancelled
-  message       String?
-  notes         String?
-  createdBy     String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  id          String    @id @default(cuid())
+  businessId  String
+  branchId    String?
+  partyId     String
+  type        String    @default("overdue") // overdue | upcoming | custom
+  channel     String    @default("manual") // manual | sms | whatsapp | email
+  scheduledAt DateTime
+  sentAt      DateTime?
+  status      String    @default("pending") // pending | sent | failed | cancelled
+  message     String?
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   party    Party    @relation(fields: [partyId], references: [id])
@@ -1228,7 +1228,7 @@ model PromiseToPay {
   saleId       String?
   promisedDate DateTime
   amount       Float
-  status       String    @default("pending")  // pending | kept | broken | partial
+  status       String    @default("pending") // pending | kept | broken | partial
   notes        String?
   createdBy    String?
   createdAt    DateTime  @default(now())
@@ -1247,18 +1247,18 @@ model PromiseToPay {
 
 /// Collection agent follow-up notes for overdue customers
 model FollowUpNote {
-  id         String    @id @default(cuid())
-  businessId String
-  branchId   String?
-  partyId    String
-  saleId     String?
-  note       String
-  outcome    String?   // contacted | no_answer | promised | refused | paid
+  id           String    @id @default(cuid())
+  businessId   String
+  branchId     String?
+  partyId      String
+  saleId       String?
+  note         String
+  outcome      String? // contacted | no_answer | promised | refused | paid
   nextFollowUp DateTime?
-  createdBy  String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   party    Party    @relation(fields: [partyId], references: [id])

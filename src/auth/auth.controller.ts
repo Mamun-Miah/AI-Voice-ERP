@@ -31,7 +31,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   // POST /auth/register
-  // Body: { name, phone, businessName, businessType }
+  // Body: { name, phone, businessName, businessType, password }
   @Post('register')
   @ApiOperation({ summary: 'Register a new user and business' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
@@ -65,47 +65,49 @@ export class AuthController {
   }
 
   // POST /auth/resend-otp
-  // Body: { uuid: userId }
-  // Throttle: 3 requests per 10 minutes
+  // Body: { userId, purpose: 'signup' | 'signin' }
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 30, ttl: 600000 } }) // 3 per 10 minutes
+  @Throttle({ default: { limit: 30, ttl: 600000 } })
   @Post('resend-otp')
   @ApiOperation({
     summary: 'Resend OTP',
     description:
-      'Works for both signup and signin. ' +
-      'Pass purpose="signup" when awaiting initial verification, ' +
-      'purpose="signin" when logging in. ' +
+      'Works for both signup and signin OTP flows. ' +
       'Throttled: 60 seconds between requests.',
   })
   @ApiResponse({ status: 200, description: 'OTP resent successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Throttled, wrong purpose, or user not found',
-  })
+  @ApiResponse({ status: 400, description: 'Throttled, wrong purpose, or user not found' })
   resendOtp(@Body() dto: ResendOtpDto) {
     return this.authService.resendOtp(dto.userId, dto.purpose);
   }
 
-  // POST /auth/login
-  // Body: { phone }
+  // POST /auth/signin
+  // Body: { phone, password }
+  // Validates credentials and returns a JWT token + sets auth cookie.
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 per minute
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 per minute
   @Post('signin')
   @ApiOperation({
-    summary: 'Sign in — step 1',
-    description:
-      'Sends an OTP to the registered phone number. Returns userId to use in step 2.',
+    summary: 'Sign in with phone and password',
+    description: 'Authenticates the user and returns a JWT token immediately.',
   })
-  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
+  @ApiResponse({ status: 200, description: 'Signin successful' })
+  @ApiResponse({ status: 401, description: 'Incorrect password or account deactivated' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  @ApiResponse({
-    status: 401,
-    description: 'Account deactivated or phone not verified',
-  })
-  signin(@Body() dto: SigninDto) {
-    return this.authService.signin(dto.phone);
+  async signin(
+    @Body() dto: SigninDto,
+    @Res({ passthrough: true }) response: express.Response,
+  ) {
+    const result = await this.authService.signin(dto.phone, dto.password);
+
+    response.cookie('Authentication', result.accessToken, {
+      ...AUTH_COOKIE_OPTIONS,
+      maxAge: COOKIE_MAX_AGE,
+    });
+
+    return result;
   }
+
 
   // GET /auth/status
   @UseGuards(JwtAuthGuard)
@@ -143,10 +145,7 @@ export class AuthController {
   @Get('business-types')
   @ApiOperation({ summary: 'Get list of business types' })
   @ApiResponse({ status: 200, description: 'Business types retrieved' })
-  @ApiResponse({
-    status: 401,
-    description: 'Failed to retrieve business types',
-  })
+  @ApiResponse({ status: 401, description: 'Failed to retrieve business types' })
   getBusinessTypes() {
     return this.authService.getBusinessTypes();
   }

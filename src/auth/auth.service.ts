@@ -84,6 +84,9 @@ export class AuthService {
     }
 
     // 3. Create Business + User atomically
+    // Hash password before the transaction to keep crypto out of the DB round-trip
+    const hashedPassword = await bcrypt.hash(dto.password, roundsOfHashing);
+
     const { business, user } = await this.prisma.$transaction(async (tx) => {
       const business = await tx.business.create({
         data: {
@@ -116,15 +119,17 @@ export class AuthService {
           businessId: business.id,
           businessTypeId: businessType.id,
           provider: 'PHONE',
+          // OTP verification is always required — phone stays unverified until then
           isPhoneVerified: false,
           roleId: role.id,
+          password: hashedPassword,
         },
       });
 
       return { business, user, branch };
     });
 
-    // 4. Generate + hash OTP
+    // 4. Generate + hash OTP (always required, even when password is set)
     const rawOtp = randomInt(100000, 999999).toString();
     const hashedOtp = await bcrypt.hash(rawOtp, roundsOfHashing);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
@@ -153,8 +158,7 @@ export class AuthService {
     // In production: send rawOtp via SMS, remove from response
     return {
       success: true,
-      message:
-        'Registration successful. Please verify your phone with the OTP.',
+      message: 'Registration successful. Please verify your phone with the OTP.',
       data: {
         userId: user.id,
         otp: rawOtp,
@@ -235,12 +239,11 @@ export class AuthService {
     };
   }
 
-  // ─── 3. SIGNIN ────────────────────────────────────────────────────────────
+  // ─── 3. SIGNIN ─────────────────────────────────────────────────────────────
   // POST /auth/signin
-  // Body: { "phone": "01XXXXXXXXX" }
-  // Finds the user, sends an OTP to their phone, returns userId + message.
-  // The client must call POST /auth/signin/verify with userId + code to get a token.
-  async signin(phone: string) {
+  // Body: { phone, password }
+  // Validates credentials and returns a JWT token immediately.
+  async signin(phone: string, password: string) {
     const user = await this.findUserByPhone(phone);
 
     if (!user) {
@@ -249,57 +252,35 @@ export class AuthService {
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated.');
     }
-    // if (!user.isPhoneVerified) {
-    //   throw new UnauthorizedException(
-    //     'Phone not verified. Please complete signup verification first.',
-    //   );
-    // }
 
-    // Generate and hash a 6-digit OTP
-    const rawCode = Math.floor(100_000 + Math.random() * 900_000).toString();
-    const hashedCode = await bcrypt.hash(rawCode, 10);
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Incorrect password.');
+    }
 
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1_000); // 10 minutes
+    const accessToken = this.jwtService.sign(this.buildTokenPayload(user), {
+      expiresIn: '7d',
+    });
 
-    // Invalidate any previous unused OTPs for this phone, then create a fresh one
-    await this.prisma.$transaction([
-      this.prisma.otp.updateMany({
-        where: { phone: user.phone, verified: false },
-        data: { verified: true }, // expire old ones
-      }),
-      this.prisma.otp.upsert({
-        where: { phone: user.phone },
-        update: {
-          code: hashedCode,
-          expiresAt,
-          verified: false,
-          createdAt: new Date(),
-        },
-        create: {
-          phone: user.phone,
-          businessId: user.businessId,
-          code: hashedCode,
-          purpose: 'signin',
-          expiresAt,
-        },
-      }),
-    ]);
+    const business = await this.fetchBusinessInfo(user.businessId);
 
-    // Send OTP via SMS
-    // await this.smsService.send(
-    //   user.phone,
-    //   `Your SmartStore login OTP is: ${rawCode}. Valid for 10 minutes.`,
-    // );
-
-    this.logger.info({ userId: user.id, phone: user.phone }, 'Signin OTP sent');
+    this.logger.info({ userId: user.id }, 'Signin successful — token issued');
 
     return {
       success: true,
-      message: 'OTP sent to your registered phone number.',
-      userId: user.id,
-      code: rawCode, // In production, do NOT return the OTP in the response!
+      message: 'Signin successful.',
+      accessToken,
+      user: {
+        id: user.id,
+        branchId: user.branchId,
+        name: user.name,
+        phone: user.phone,
+        role: user.role?.name || 'owner',
+      },
+      business,
     };
   }
+
 
   // ─── RESEND OTP ────────────────────────────────────────────────────────────
   // POST /auth/resend-otp

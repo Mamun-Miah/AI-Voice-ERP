@@ -252,6 +252,11 @@ export class AuthService {
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated.');
     }
+    if (!user.isPhoneVerified) {
+      throw new UnauthorizedException(
+        'Phone not verified. Please verify your OTP first using POST /api/auth/verify-otp.',
+      );
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {

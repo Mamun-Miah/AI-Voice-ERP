@@ -175,9 +175,9 @@ export class AuthService {
     if (!user) {
       throw new BadRequestException('User not found.');
     }
-    // if (user.isPhoneVerified) {
-    //   throw new BadRequestException('Phone already verified. Please sign in.');
-    // }
+    if (user.isPhoneVerified) {
+      throw new BadRequestException('Phone already verified. Please sign in.');
+    }
 
     // Find latest valid OTP
     const otpRecord = await this.prisma.otp.findFirst({

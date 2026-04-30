@@ -340,7 +340,7 @@ export class AuthService {
       data: { verified: true },
     });
 
-    // ── Generate + hash new OTP ───────────────────────────────────────────────
+    // ── Generate + hash new OTP ──────────────
     const rawOtp = randomInt(100_000, 999_999).toString();
     const hashedOtp = await bcrypt.hash(rawOtp, roundsOfHashing);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1_000); // 5 minutes

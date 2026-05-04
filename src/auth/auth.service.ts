@@ -290,9 +290,6 @@ export class AuthService {
   // ─── RESEND OTP ────────────────────────────────────────────────────────────
   // POST /auth/resend-otp
   // Body: { userId, purpose: 'signup' | 'signin' }
-  // Works for both flows:
-  //   - signup:  user must NOT be verified yet
-  //   - signin:  user MUST already be verified
   // Throttled: must wait 60 seconds between resend requests
   async resendOtp(userId: string, purpose: 'signup' | 'signin') {
     const user = await this.findUserById(userId);

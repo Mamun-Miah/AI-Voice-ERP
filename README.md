@@ -3,8 +3,8 @@
 Production-ready backend API built with **NestJS**, **Prisma**, and **JWT Authentication**.  
 Designed for scalability, security, and clean architecture.
 
-🌐 **Live URL: Api Docs**
-https://voiceerp.mapleitfirm.com/docs
+🌐 **Live URL: Api Docs** — https://voiceerp.mapleitfirm.com/docs
+
 ---
 
 ## 🚀 Tech Stack
@@ -27,18 +27,17 @@ https://voiceerp.mapleitfirm.com/docs
 
 ## 📁 Project Structure
 
+```
 src/
-├── auth/ # Authentication & authorization
-├── users/ # User management
-├── files/ # File upload & access
-├── prisma/ # Prisma service
-├── common/ # Guards, decorators, filters
-├── config/ # App configuration
+├── auth/           # Authentication & authorization
+├── users/          # User management
+├── files/          # File upload & access
+├── prisma/         # Prisma service
+├── common/         # Guards, decorators, filters
+├── config/         # App configuration
 ├── app.module.ts
 └── main.ts
-
-yaml
-Copy code
+```
 
 ---
 
@@ -61,39 +60,56 @@ SMTP_USER=your_email
 SMTP_PASS=your_password
 
 SENTRY_DSN=your_sentry_dsn
-📦 Installation
-bash
-Copy code
+```
+
+---
+
+## 📦 Installation
+
+```bash
 git clone https://github.com/your-username/your-repo-name.git
 cd your-repo-name
 npm install
+```
 
-🧱 Prisma Setup
-bash
-Copy code
+---
+
+## 🧱 Prisma Setup
+
+```bash
 npx prisma generate
 npx prisma db push
 npx prisma migrate dev
-(Optional)
+```
 
-bash
-Copy code
+Optional:
+
+```bash
 npx prisma studio
+```
 
-▶️ Running the App
-Development
-bash
-Copy code
+---
+
+## ▶️ Running the App
+
+**Development**
+
+```bash
 npm run start:dev
-Production
-bash
-Copy code
+```
+
+**Production**
+
+```bash
 npm run build
 npm run start:prod
+```
 
-🧪 Testing
-bash
-Copy code
+---
+
+## 🧪 Testing
+
+```bash
 # Unit tests
 npm run test
 
@@ -105,74 +121,69 @@ npm run test:cov
 
 # E2E tests
 npm run test:e2e
+```
 
-🔐 Authentication
-JWT-based authentication
+---
 
-Cookie-supported authentication
+## 🔐 Authentication
 
-Passport strategies:
-
-Local Strategy
-
-JWT Strategy
+- JWT-based authentication
+- Cookie-supported authentication
+- Passport strategies: Local Strategy, JWT Strategy
 
 Example protected route:
 
-ts
-Copy code
+```ts
 @UseGuards(AuthGuard('jwt'))
-📤 File Uploads
-Uses Multer
+```
 
-Supports:
+---
 
-User profile image
+## 📤 File Uploads
 
-NID / private documents
+Uses Multer. Supports:
 
-Business logo
+- User profile image
+- NID / private documents
+- Business logo
 
-Private files are protected using authentication guards
+Private files are protected using authentication guards.
 
-📧 Email Service
-SMTP-based email service
+---
 
-EJS templates
+## 📧 Email Service
 
-Use cases:
+- SMTP-based email service
+- EJS templates
+- Use cases: account verification, notifications, password reset
 
-Account verification
+---
 
-Notifications
+## 📝 Logging
 
-Password reset
+- High-performance logging with Pino
+- Pretty logs in development
+- JSON logs in production
 
-📝 Logging
-High-performance logging with Pino
+---
 
-Pretty logs in development
+## 📈 Monitoring
 
-JSON logs in production
+Integrated with Sentry for error tracking & performance monitoring.
 
-📈 Monitoring
-Integrated with Sentry
+---
 
-Error tracking & performance monitoring
+## 🛡️ Security Features
 
-🛡️ Security Features
-Rate limiting using @nestjs/throttler
+- Rate limiting using `@nestjs/throttler`
+- Secure cookie handling
+- DTO validation
+- Password hashing with bcryptjs
 
-Secure cookie handling
-
-DTO validation
-
-Password hashing with bcryptjs
+---
 
 ## 📄 License
 
 This project is **proprietary software**.
 
-Unauthorized copying, modification, distribution, or use of this software
-is strictly prohibited without prior written permission from the author.
-```
+Unauthorized copying, modification, distribution, or use of this software is strictly prohibited without prior written permission from the author.

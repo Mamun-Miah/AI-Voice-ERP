@@ -67,16 +67,19 @@ Copy code
 git clone https://github.com/your-username/your-repo-name.git
 cd your-repo-name
 npm install
+
 🧱 Prisma Setup
 bash
 Copy code
 npx prisma generate
+npx prisma db push
 npx prisma migrate dev
 (Optional)
 
 bash
 Copy code
 npx prisma studio
+
 ▶️ Running the App
 Development
 bash
@@ -87,6 +90,7 @@ bash
 Copy code
 npm run build
 npm run start:prod
+
 🧪 Testing
 bash
 Copy code
@@ -101,6 +105,7 @@ npm run test:cov
 
 # E2E tests
 npm run test:e2e
+
 🔐 Authentication
 JWT-based authentication
 
@@ -170,7 +175,4 @@ This project is **proprietary software**.
 
 Unauthorized copying, modification, distribution, or use of this software
 is strictly prohibited without prior written permission from the author.
-
-👨‍💻 Author
-Built with ❤️ using NestJS and Prisma.
 ```

@@ -167,12 +167,6 @@ Private files are protected using authentication guards.
 
 ---
 
-## 📈 Monitoring
-
-Integrated with Sentry for error tracking & performance monitoring.
-
----
-
 ## 🛡️ Security Features
 
 - Rate limiting using `@nestjs/throttler`
